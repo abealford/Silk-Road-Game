@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Silk Road · 1272</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=EB+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<!--#include style|css/main.css -->
+<!--#include style|css/fonts.css+prototypes/combat-practice/combat.css -->
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="intro">
+  <div class="card">
+    <div class="eyebrow">ANNO DOMINI 1272</div>
+    <h1>The Silk Road</h1>
+    <div class="sub">Walk from Constantinople to the court of Kublai Khan</div>
+    <div id="loading"><div class="bar"><div id="loadbar"></div></div><div id="loadtxt">Unrolling the map…</div></div>
+    <div class="rule"></div>
+    <div class="controls">
+      <b>W A S D</b><span>Walk · hold <b>Shift</b> to hurry · <b>T</b> walk 2× or 4×</span>
+      <b>Mouse</b><span>Look around (click to capture the mouse)</span>
+      <b>1 – 9</b><span>Choose your next road at a city crossroads</span>
+      <b>F</b><span>Follow the road to the next city</span>
+      <b>M</b><span>Open the map (free roam: travel to any city)</span>
+      <b>E · J · C</b><span>Journey mode: talk to traders, journal, caravan</span>
+    </div>
+    <button id="startbtn">Begin the Journey</button>
+    <div id="modes">
+      <button class="modebtn" data-mode="journey"><b>The Journey</b><small>Matteo's story: from Acre to the court of Kublai Khan</small></button>
+      <button class="modebtn alt" data-mode="free"><b>Free Roam</b><small>Explore freely, with fast travel from the map</small></button>
+      <button class="modebtn alt" data-mode="combat"><b>Combat Practice</b><small>Five waves in the arena, where time moves only when you move</small></button>
+      <button class="modebtn cont" data-mode="continue"><b>Continue the Journey</b><small>Resume from your last city</small></button>
+    </div>
+  </div>
+</div>
+
+<div id="hud">
+  <div id="compass"></div>
+  <div id="target"></div>
+  <div id="loc"></div>
+  <div id="visited"></div>
+  <div id="cross-dot"></div>
+  <div id="banner"><div id="b-name"></div><div id="b-polity"></div><div class="orn"></div><div id="b-modern"></div><div id="b-blurb"></div></div>
+  <div id="toast"><div id="t-sub"></div><div id="t-name"></div><div id="t-blurb"></div></div>
+  <canvas id="minimap"></canvas>
+  <div id="cross"></div>
+  <div id="hint"><b>WASD</b> walk · <span class="fr"><b>Shift</b> hurry · </span><b>F</b> follow road · <b>M</b> map · <b>N</b> minimap · <b>T</b> speed · <b>L</b> time of day · <span class="fr"><b>Y</b> season · </span><b>P</b> pause</div>
+  <div id="help"><div class="controls">
+      <b>W A S D</b><span>Walk · Arrow keys also work</span>
+      <b>Shift</b><span>Hurry</span>
+      <b>Mouse</b><span>Look (click to capture, Esc to release)</span>
+      <b>1 – 9</b><span>Choose a road at a crossroads</span>
+      <b>F</b><span>Follow the road to the next city</span>
+      <b>M</b><span>Map · click a city to travel there</span>
+  </div></div>
+</div>
+<div id="pause"><div class="pm">
+  <div class="pm-t">Paused</div>
+  <button id="pm-resume" class="pm-main">Resume</button>
+  <button id="pm-save" class="jr">Save the journey</button>
+  <button id="pm-restart" class="jr">Restart the journey</button>
+  <div id="pm-confirm"><p>Start the Journey again from the beginning? Your current progress will be lost.</p><button id="pm-yes">Yes, restart</button><button id="pm-no">Cancel</button></div>
+  <div id="pm-gfx"><span>Graphics</span><button data-q="low">Low</button><button data-q="medium">Medium</button><button data-q="high">High</button></div>
+  <button id="pm-menu">Main menu</button>
+  <div class="pm-keys"><b>P</b> pause · <b>N</b> minimap zoom · <b>M</b> map · <b>H</b> help</div>
+</div></div>
+
+<div id="map">
+  <canvas id="mapc"></canvas>
+  <div class="mtitle"><div class="t">The Silk Roads</div><div class="s">Overland routes from Constantinople to Cathay, 1272</div></div>
+  <div class="mbtns"><button class="layer on" data-l="1272">States of 1272</button><button class="layer" data-l="modern">Modern borders</button><button class="layer" data-l="none">No borders</button><button class="layer" data-l="terrain">Terrain only</button><button id="zin">＋</button><button id="zout">－</button><button id="mclose">Close (M)</button></div>
+  <div id="mapcard"></div>
+  <div id="legend"></div><div id="zoutnote">Zoomed all the way out</div>
+  <div class="mhint">Drag to pan · scroll to zoom · click a city to travel<br><span style="font-size:12px;opacity:.8">Coastlines, lakes, rivers &amp; modern borders: Natural Earth · 1272 borders adapted from historical-basemaps (A. Ourednik), approximate</span></div>
+</div>
+<div id="cb-hud">
+  <div id="cb-slow"></div><div id="cb-hurt"></div>
+  <div id="cb-info"><b id="cb-w"></b><i id="cb-wn"></i><span id="cb-left"></span><div id="cb-hp"></div><div id="cb-wpn"></div></div>
+  <div id="cb-dot"></div>
+  <div id="cb-banner"></div>
+  <div id="cb-time">Time<div class="tr"><div id="cb-tbar"></div></div></div>
+  <div id="cb-keyline"><b>WASD</b> move · <b>Mouse</b> look · <b>Click</b> attack · <b>P</b> pause · stand still to slow time</div>
+</div>
+<div id="cb-ui"><div class="card" id="cb-card"></div></div>
+<div id="fade"></div>
+
+<!--#include script|vendor/three.min.js -->
+<!--#include script|src/geo.js -->
+<!--#include script|src/data.js -->
+<!--#include script|src/world.js -->
+<!--#include script|src/builders.js -->
+<!--#include script|prototypes/combat-practice/game.js -->
+<!--#include script|src/econ.js -->
+<!--#include script|src/icons.js -->
+<!--#include script|src/events.js -->
+<!--#include script|src/journey.js -->
+<!--#include script|prototypes/combat-practice/combat.js -->
+</body>
+</html>
