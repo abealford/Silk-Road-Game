@@ -4,6 +4,7 @@ One line per version, newest first. Details live in the claude.ai project docs (
 
 | Version | Date | What changed |
 |---|---|---|
+| v19.0 (test page) | 18 Nov 2026 | **Markets and goods:** 11 markets and 253 goods with five rarities (8 common, 5 uncommon, 4 rare, 3 epic, 3 legendary per market). Merchants roll a fresh stock after 3+ days away or another city: commons fill 10 / 5–7 / 3–4 slots, then uncommon 40%, rare 20%, epic 12.5% and legendary 5% each roll once to replace one (double epic and legendary odds in specialty towns). New prices: home price at home, rising with distance and each market's demand by type; tuned with `tools/markets/sim.py` to about 1.2–1.3× the v18 pace by day 600. A Markets layer on the map, rarity colours and rimmed icons, the Goods guide grouped by market, contracts refreshed with the stock. [markets, goods catalogue] |
 | v18.3 | 18 Nov 2026 | **Combat Practice becomes the main game's combat mode**, replacing the Arena on the title screen; the Arena moves to `prototypes/arena/`. Source recovered into this repo from the published pages, with a build that reproduces them byte for byte. [combat practice] |
 | v18.2 | ~11 Nov 2026 | The Arena: a SUPERHOT-style combat prototype (now retired). Combat Practice built in parallel as its own page. [combat practice] |
 | v18.1 | ~11 Nov 2026 | Ships on autopilot in Free Roam too (B in any port). [campaign plan] |

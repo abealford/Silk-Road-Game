@@ -1,0 +1,929 @@
+[
+ {
+  "id": "silk",
+  "name": "Chinese silk",
+  "unit": "bolt",
+  "size": "medium",
+  "base": 40,
+  "slope": 0.31,
+  "cap": 3.6,
+  "prod": [
+   "quinsai",
+   "yangzhou",
+   "chengdu",
+   "kaifeng",
+   "jingzhao",
+   "zaitun",
+   "fuzhou",
+   "ezhou",
+   "luoyang",
+   "zhending",
+   "khanbaliq",
+   "guangzhou",
+   "tanzhou"
+  ],
+  "blurb": "The thread that gave the road its name, woven in the workshops of Hangzhou and Sichuan."
+ },
+ {
+  "id": "porcelain",
+  "name": "Porcelain",
+  "unit": "crate",
+  "size": "bulky",
+  "base": 44,
+  "slope": 0.45,
+  "cap": 3.4,
+  "prod": [
+   "zaitun",
+   "fuzhou",
+   "quinsai",
+   "kaifeng",
+   "guangzhou"
+  ],
+  "blurb": "Celadon and white wares from the kilns of Fujian and Jiangxi."
+ },
+ {
+  "id": "tea",
+  "name": "Brick tea",
+  "unit": "bale",
+  "size": "medium",
+  "base": 8,
+  "slope": 0.42,
+  "cap": 2.6,
+  "prod": [
+   "fuzhou",
+   "quinsai",
+   "chengdu",
+   "ezhou",
+   "yachi",
+   "dali"
+  ],
+  "blurb": "Pressed tea, prized by Tibetans and steppe nomads."
+ },
+ {
+  "id": "lacquer",
+  "name": "Lacquerware",
+  "unit": "crate",
+  "size": "medium",
+  "base": 22,
+  "slope": 0.35,
+  "cap": 3,
+  "prod": [
+   "quinsai",
+   "fuzhou",
+   "chengdu",
+   "pagan",
+   "thanglong"
+  ],
+  "blurb": "Carved red lacquer boxes and trays."
+ },
+ {
+  "id": "ginger",
+  "name": "Ginger",
+  "unit": "sack",
+  "size": "medium",
+  "base": 8,
+  "slope": 0.42,
+  "cap": 2.8,
+  "prod": [
+   "quinsai",
+   "fuzhou",
+   "zaitun",
+   "ezhou",
+   "guangzhou",
+   "thanglong"
+  ],
+  "blurb": "Polo saw great quantities of ginger around Fuzhou."
+ },
+ {
+  "id": "rhubarb",
+  "name": "Rhubarb root",
+  "unit": "sack",
+  "size": "medium",
+  "base": 8,
+  "slope": 0.42,
+  "cap": 3,
+  "prod": [
+   "jiuquan",
+   "xining",
+   "zhangye",
+   "wuwei"
+  ],
+  "blurb": "Polo said the finest rhubarb grew in the mountains of Suzhou, sold across the world as medicine."
+ },
+ {
+  "id": "musk",
+  "name": "Musk",
+  "unit": "pod",
+  "size": "compact",
+  "base": 35,
+  "slope": 0.25,
+  "cap": 3,
+  "prod": [
+   "xining",
+   "lhasa",
+   "sakya",
+   "ngari",
+   "dali"
+  ],
+  "blurb": "From the musk deer of Tibet. A small pod is worth a fortune."
+ },
+ {
+  "id": "jade",
+  "name": "Khotan jade",
+  "unit": "block",
+  "size": "bulky",
+  "base": 42,
+  "slope": 0.46,
+  "cap": 2.8,
+  "prod": [
+   "khotan",
+   "yarkand"
+  ],
+  "blurb": "White and green jade from the rivers of Khotan, carried east to China for 2,000 years."
+ },
+ {
+  "id": "paper",
+  "name": "Samarkand paper",
+  "unit": "ream",
+  "size": "medium",
+  "base": 9,
+  "slope": 0.41,
+  "cap": 2.4,
+  "prod": [
+   "samarkand",
+   "bukhara",
+   "kaifeng",
+   "khotan",
+   "qocho"
+  ],
+  "blurb": "Samarkand learned papermaking from Chinese prisoners captured in 751."
+ },
+ {
+  "id": "carpets",
+  "name": "Turkoman carpets",
+  "unit": "roll",
+  "size": "bulky",
+  "base": 36,
+  "slope": 0.49,
+  "cap": 2.6,
+  "prod": [
+   "iconium",
+   "caesarea",
+   "sivas",
+   "tabriz",
+   "bukhara",
+   "khotan",
+   "kashgar"
+  ],
+  "blurb": "Polo called the carpets of Konya, Kayseri and Sivas \"the finest and handsomest in the world\"."
+ },
+ {
+  "id": "brocade",
+  "name": "Gold brocade",
+  "unit": "bolt",
+  "size": "medium",
+  "base": 45,
+  "slope": 0.3,
+  "cap": 2.6,
+  "prod": [
+   "tabriz",
+   "baghdad",
+   "herat",
+   "delhi"
+  ],
+  "blurb": "Nasij, cloth of gold woven for Mongol princes at Tabriz and Baghdad."
+ },
+ {
+  "id": "muslin",
+  "name": "Muslin",
+  "unit": "bolt",
+  "size": "medium",
+  "base": 12,
+  "slope": 0.39,
+  "cap": 2.4,
+  "prod": [
+   "mosul",
+   "baghdad",
+   "sonargaon",
+   "lakhnauti"
+  ],
+  "blurb": "Fine cotton cloth: the muslin of Mosul gave Europe the word, but the finest of all is woven in Bengal."
+ },
+ {
+  "id": "glass",
+  "name": "Glassware",
+  "unit": "crate",
+  "size": "bulky",
+  "base": 32,
+  "slope": 0.51,
+  "cap": 3,
+  "prod": [
+   "damascus",
+   "aleppo",
+   "constantinople",
+   "alexandria",
+   "cairo",
+   "tabriz"
+  ],
+  "blurb": "Enamelled glass of Damascus and Aleppo, and Venetian glass shipped through Constantinople."
+ },
+ {
+  "id": "blades",
+  "name": "Damascus steel",
+  "unit": "blade",
+  "size": "medium",
+  "base": 40,
+  "slope": 0.31,
+  "cap": 2.4,
+  "prod": [
+   "damascus"
+  ],
+  "blurb": "Watered-steel swords, envied across Asia."
+ },
+ {
+  "id": "rosewater",
+  "name": "Rosewater",
+  "unit": "flask",
+  "size": "medium",
+  "base": 10,
+  "slope": 0.4,
+  "cap": 2.6,
+  "prod": [
+   "damascus",
+   "isfahan",
+   "yazd",
+   "taif",
+   "kanauj"
+  ],
+  "blurb": "Distilled from Damask roses."
+ },
+ {
+  "id": "olive",
+  "name": "Olive oil",
+  "unit": "jar",
+  "size": "bulky",
+  "base": 19,
+  "slope": 0.6,
+  "cap": 2.5,
+  "prod": [
+   "smyrna",
+   "nicaea",
+   "aleppo",
+   "damascus",
+   "sinope",
+   "acre",
+   "jerusalem"
+  ],
+  "blurb": "Pressed in the groves of the Aegean and Syria."
+ },
+ {
+  "id": "wool",
+  "name": "Flemish woollens",
+  "unit": "bolt",
+  "size": "medium",
+  "base": 18,
+  "slope": 0.36,
+  "cap": 2.4,
+  "prod": [
+   "constantinople",
+   "ayas",
+   "trebizond",
+   "acre",
+   "alexandria"
+  ],
+  "blurb": "Fine European cloth brought east by Venetian and Genoese ships."
+ },
+ {
+  "id": "coral",
+  "name": "Red coral",
+  "unit": "string",
+  "size": "compact",
+  "base": 25,
+  "slope": 0.27,
+  "cap": 3.4,
+  "prod": [
+   "constantinople",
+   "ayas",
+   "smyrna",
+   "alexandria",
+   "acre"
+  ],
+  "blurb": "Mediterranean coral, worn in Tibet and treasured in China."
+ },
+ {
+  "id": "amber",
+  "name": "Baltic amber",
+  "unit": "string",
+  "size": "compact",
+  "base": 22,
+  "slope": 0.28,
+  "cap": 3,
+  "prod": [
+   "sarai",
+   "constantinople",
+   "caffa"
+  ],
+  "blurb": "Brought down the Volga and through the Black Sea ports."
+ },
+ {
+  "id": "furs",
+  "name": "Sable furs",
+  "unit": "bundle",
+  "size": "medium",
+  "base": 30,
+  "slope": 0.33,
+  "cap": 2.6,
+  "prod": [
+   "sarai",
+   "saraichik",
+   "tana"
+  ],
+  "blurb": "Furs from the northern forests, traded at the Golden Horde's markets."
+ },
+ {
+  "id": "wax",
+  "name": "Wax and honey",
+  "unit": "cask",
+  "size": "bulky",
+  "base": 20,
+  "slope": 0.59,
+  "cap": 2.5,
+  "prod": [
+   "sarai",
+   "saraichik",
+   "tana"
+  ],
+  "blurb": "From the forests of the Rus principalities."
+ },
+ {
+  "id": "lapis",
+  "name": "Lapis lazuli",
+  "unit": "sack",
+  "size": "medium",
+  "base": 30,
+  "slope": 0.33,
+  "cap": 3,
+  "prod": [
+   "badakhshan"
+  ],
+  "blurb": "The only great source of lapis in the world, ground for ultramarine pigment."
+ },
+ {
+  "id": "rubies",
+  "name": "Balas rubies",
+  "unit": "pouch",
+  "size": "compact",
+  "base": 70,
+  "slope": 0.2,
+  "cap": 2.8,
+  "prod": [
+   "badakhshan",
+   "pagan"
+  ],
+  "blurb": "Polo said the king of Badakhshan alone could mine them, on pain of death."
+ },
+ {
+  "id": "turquoise",
+  "name": "Turquoise",
+  "unit": "pouch",
+  "size": "compact",
+  "base": 24,
+  "slope": 0.27,
+  "cap": 2.8,
+  "prod": [
+   "nishapur",
+   "kerman"
+  ],
+  "blurb": "Mined at Nishapur and Kerman."
+ },
+ {
+  "id": "saffron",
+  "name": "Saffron",
+  "unit": "pouch",
+  "size": "compact",
+  "base": 30,
+  "slope": 0.26,
+  "cap": 2.6,
+  "prod": [
+   "hamadan",
+   "isfahan"
+  ],
+  "blurb": "Hand-picked crocus stamens from the Iranian plateau."
+ },
+ {
+  "id": "pepper",
+  "name": "Indian pepper",
+  "unit": "sack",
+  "size": "medium",
+  "base": 14,
+  "slope": 0.38,
+  "cap": 3,
+  "prod": [
+   "hormuz",
+   "zaitun",
+   "cambay",
+   "kayal",
+   "thana",
+   "aden"
+  ],
+  "blurb": "Landed by ships from Malabar at Hormuz and Zaitun."
+ },
+ {
+  "id": "incense",
+  "name": "Frankincense",
+  "unit": "sack",
+  "size": "medium",
+  "base": 12,
+  "slope": 0.39,
+  "cap": 2.6,
+  "prod": [
+   "hormuz",
+   "baghdad",
+   "zafar",
+   "shihr",
+   "aden"
+  ],
+  "blurb": "Resin from southern Arabia, burned in churches, mosques and temples."
+ },
+ {
+  "id": "indigo",
+  "name": "Indigo",
+  "unit": "cake",
+  "size": "medium",
+  "base": 12,
+  "slope": 0.39,
+  "cap": 2.6,
+  "prod": [
+   "hormuz",
+   "baghdad",
+   "anhilwara",
+   "cambay",
+   "multan",
+   "mathura",
+   "delhi"
+  ],
+  "blurb": "Indian dye, traded up the Gulf."
+ },
+ {
+  "id": "dates",
+  "name": "Dates",
+  "unit": "basket",
+  "size": "bulky",
+  "base": 17,
+  "slope": 0.62,
+  "cap": 2.6,
+  "prod": [
+   "baghdad",
+   "hormuz",
+   "kerman",
+   "medina",
+   "khaybar",
+   "ula",
+   "qus",
+   "faid"
+  ],
+  "blurb": "From the palm groves of Mesopotamia."
+ },
+ {
+  "id": "fruit",
+  "name": "Dried fruit & nuts",
+  "unit": "sack",
+  "size": "bulky",
+  "base": 18,
+  "slope": 0.61,
+  "cap": 2.6,
+  "prod": [
+   "isfahan",
+   "samarkand",
+   "bukhara",
+   "kabul",
+   "herat",
+   "qocho",
+   "hami",
+   "taif",
+   "kandahar"
+  ],
+  "blurb": "Apricots, pistachios, almonds and the famous raisins of Turfan."
+ },
+ {
+  "id": "wine",
+  "name": "Wine",
+  "unit": "jar",
+  "size": "bulky",
+  "base": 20,
+  "slope": 0.59,
+  "cap": 2.6,
+  "prod": [
+   "tiflis",
+   "nicaea",
+   "smyrna",
+   "qocho",
+   "caffa"
+  ],
+  "blurb": "Georgian, Greek and Turfan wines, much loved at the Mongol courts."
+ },
+ {
+  "id": "felt",
+  "name": "Felt",
+  "unit": "roll",
+  "size": "bulky",
+  "base": 18,
+  "slope": 0.61,
+  "cap": 2.6,
+  "prod": [
+   "sarai",
+   "almaliq",
+   "shangdu",
+   "beshbalik"
+  ],
+  "blurb": "Pressed wool, used for yurts and saddle blankets."
+ },
+ {
+  "id": "rawsilk",
+  "name": "Caspian raw silk",
+  "unit": "bale",
+  "size": "medium",
+  "base": 16,
+  "slope": 0.37,
+  "cap": 2.6,
+  "prod": [
+   "derbent",
+   "baku",
+   "rayy",
+   "yazd",
+   "merv",
+   "samarkand",
+   "khujand",
+   "khotan",
+   "kashgar"
+  ],
+  "blurb": "Polo saw the silk of Ghel (Gilan) by the Caspian, and the silk weavers of Yazd."
+ },
+ {
+  "id": "naphtha",
+  "name": "Naphtha",
+  "unit": "jar",
+  "size": "bulky",
+  "base": 18,
+  "slope": 0.61,
+  "cap": 2.6,
+  "prod": [
+   "baku"
+  ],
+  "blurb": "Polo described a spring near Baku gushing oil \"good for burning\", carried away on camels."
+ },
+ {
+  "id": "cotton",
+  "name": "Raw cotton",
+  "unit": "bale",
+  "size": "bulky",
+  "base": 18,
+  "slope": 0.61,
+  "cap": 2.6,
+  "prod": [
+   "merv",
+   "bukhara",
+   "urgench",
+   "osh",
+   "khujand",
+   "kashgar",
+   "otrar",
+   "multan",
+   "cambay"
+  ],
+  "blurb": "Cotton grows in every oasis of Transoxiana and Fergana."
+ },
+ {
+  "id": "salammoniac",
+  "name": "Sal ammoniac",
+  "unit": "cake",
+  "size": "medium",
+  "base": 12,
+  "slope": 0.39,
+  "cap": 2.6,
+  "prod": [
+   "kucha",
+   "aksu",
+   "korla"
+  ],
+  "blurb": "Collected from volcanic vents in the Tian Shan, used by dyers and doctors. A famous export of Kucha."
+ },
+ {
+  "id": "chalcedony",
+  "name": "Jasper & chalcedony",
+  "unit": "pouch",
+  "size": "compact",
+  "base": 16,
+  "slope": 0.3,
+  "cap": 2.6,
+  "prod": [
+   "cherchen",
+   "lop"
+  ],
+  "blurb": "Polo said the rivers of Cherchen carry jasper and chalcedony, sold in China."
+ },
+ {
+  "id": "horsegear",
+  "name": "Saddles & bridles",
+  "unit": "set",
+  "size": "medium",
+  "base": 10,
+  "slope": 0.4,
+  "cap": 2.2,
+  "prod": [
+   "taraz",
+   "balasagun",
+   "almaliq",
+   "otrar",
+   "sarai",
+   "zhangye",
+   "wuwei",
+   "kashgar",
+   "lahore",
+   "multan"
+  ],
+  "blurb": "Fine leather tack from the horse peoples of the steppe."
+ },
+ {
+  "id": "buckram",
+  "name": "Erzincan buckram",
+  "unit": "bolt",
+  "size": "medium",
+  "base": 10,
+  "slope": 0.4,
+  "cap": 2.4,
+  "prod": [
+   "erzincan",
+   "erzurum"
+  ],
+  "blurb": "Polo praised the buckram cloth woven at Erzincan."
+ },
+ {
+  "id": "cottoncloth",
+  "name": "Gujarati cotton cloth",
+  "unit": "bolt",
+  "size": "medium",
+  "base": 9,
+  "slope": 0.41,
+  "cap": 2.8,
+  "prod": [
+   "cambay",
+   "anhilwara",
+   "devagiri",
+   "varanasi",
+   "aden"
+  ],
+  "blurb": "Printed and dyed cottons from Gujarat, the cloth that clothed half the Indian Ocean."
+ },
+ {
+  "id": "pearls",
+  "name": "Pearls of Mannar",
+  "unit": "pouch",
+  "size": "compact",
+  "base": 60,
+  "slope": 0.21,
+  "cap": 3,
+  "prod": [
+   "kayal",
+   "madurai"
+  ],
+  "blurb": "Polo watched divers bring up pearls off the Pandya coast, and saw the king wear 104 of them on a single cord."
+ },
+ {
+  "id": "cinnamon",
+  "name": "Cinnamon",
+  "unit": "bundle",
+  "size": "medium",
+  "base": 14,
+  "slope": 0.38,
+  "cap": 3,
+  "prod": [
+   "kayal",
+   "madurai",
+   "thanjavur"
+  ],
+  "blurb": "Bark from Sri Lanka and the far south, landed in the Pandya ports."
+ },
+ {
+  "id": "spices",
+  "name": "Cloves & nutmeg",
+  "unit": "pouch",
+  "size": "medium",
+  "base": 28,
+  "slope": 0.33,
+  "cap": 3.6,
+  "prod": [
+   "kedah",
+   "tambralinga"
+  ],
+  "blurb": "From the Spice Islands far to the east, traded through the ports of the Malay peninsula."
+ },
+ {
+  "id": "sandalwood",
+  "name": "Sandalwood",
+  "unit": "log",
+  "size": "bulky",
+  "base": 30,
+  "slope": 0.52,
+  "cap": 2.8,
+  "prod": [
+   "dvarasamudra",
+   "kanchipuram"
+  ],
+  "blurb": "Fragrant wood from the hills of the Hoysala country, burned in temples from Cairo to Quinsai."
+ },
+ {
+  "id": "ivory",
+  "name": "Ivory",
+  "unit": "tusk",
+  "size": "bulky",
+  "base": 44,
+  "slope": 0.45,
+  "cap": 2.8,
+  "prod": [
+   "pagan",
+   "angkor",
+   "vijaya"
+  ],
+  "blurb": "Elephant tusks from the forests of Burma and Cambodia, carved in China into fans and seals."
+ },
+ {
+  "id": "aloeswood",
+  "name": "Aloeswood (agar)",
+  "unit": "pouch",
+  "size": "medium",
+  "base": 40,
+  "slope": 0.31,
+  "cap": 3.2,
+  "prod": [
+   "angkor",
+   "vijaya",
+   "lavo"
+  ],
+  "blurb": "Resin-soaked heartwood worth more than its weight in silver. Champa's is said to be the best."
+ },
+ {
+  "id": "tin",
+  "name": "Malay tin",
+  "unit": "ingot",
+  "size": "bulky",
+  "base": 22,
+  "slope": 0.57,
+  "cap": 2.4,
+  "prod": [
+   "kedah",
+   "tambralinga"
+  ],
+  "blurb": "Tin from the river gravels of the peninsula, alloyed into bronze across Asia."
+ },
+ {
+  "id": "sugar",
+  "name": "Cane sugar",
+  "unit": "loaf",
+  "size": "bulky",
+  "base": 20,
+  "slope": 0.59,
+  "cap": 2.6,
+  "prod": [
+   "cairo",
+   "qus",
+   "lakhnauti",
+   "guangzhou",
+   "kanauj",
+   "delhi"
+  ],
+  "blurb": "Egyptian sugar refined in the mills of Fustat, and the raw sugar of Bengal."
+ },
+ {
+  "id": "linen",
+  "name": "Egyptian linen",
+  "unit": "bolt",
+  "size": "medium",
+  "base": 10,
+  "slope": 0.4,
+  "cap": 2.4,
+  "prod": [
+   "alexandria",
+   "cairo",
+   "qus"
+  ],
+  "blurb": "Fine flax cloth of the Delta, prized since the pharaohs."
+ },
+ {
+  "id": "balsam",
+  "name": "Balsam of Matariya",
+  "unit": "phial",
+  "size": "compact",
+  "base": 45,
+  "slope": 0.23,
+  "cap": 3,
+  "prod": [
+   "cairo"
+  ],
+  "blurb": "Grown only in one walled garden near Cairo. Christians believe the Holy Family rested there. Sultans send it as royal gifts."
+ },
+ {
+  "id": "emeralds",
+  "name": "Egyptian emeralds",
+  "unit": "pouch",
+  "size": "compact",
+  "base": 55,
+  "slope": 0.22,
+  "cap": 2.8,
+  "prod": [
+   "aswan"
+  ],
+  "blurb": "From the ancient mines of the Eastern Desert, worked since Ptolemaic times."
+ },
+ {
+  "id": "betel",
+  "name": "Areca & betel",
+  "unit": "basket",
+  "size": "bulky",
+  "base": 17,
+  "slope": 0.62,
+  "cap": 2.6,
+  "prod": [
+   "chittagong",
+   "sonargaon",
+   "pegu",
+   "martaban",
+   "thanglong"
+  ],
+  "blurb": "Chewed everywhere from Bengal to Vietnam, staining lips and teeth red."
+ },
+ {
+  "id": "carnelian",
+  "name": "Yemeni carnelian",
+  "unit": "pouch",
+  "size": "compact",
+  "base": 20,
+  "slope": 0.28,
+  "cap": 2.8,
+  "prod": [
+   "sanaa",
+   "taizz"
+  ],
+  "blurb": "Red agate (ʿaqīq) from the mines near Sanaa, carved into seals and rings."
+ },
+ {
+  "id": "golddust",
+  "name": "Gold dust",
+  "unit": "pouch",
+  "size": "compact",
+  "base": 65,
+  "slope": 0.21,
+  "cap": 2.4,
+  "prod": [
+   "yongchang",
+   "bhamo",
+   "dali"
+  ],
+  "blurb": "Polo said the people of Zardandan covered their teeth in gold and paid for everything with it."
+ },
+ {
+  "id": "salt",
+  "name": "Salt cakes",
+  "unit": "cake",
+  "size": "bulky",
+  "base": 17,
+  "slope": 0.62,
+  "cap": 3,
+  "prod": [
+   "jianchang",
+   "najran",
+   "faid",
+   "aswan",
+   "caffa"
+  ],
+  "blurb": "In Caindu, Polo saw salt cakes stamped with the ruler's seal used as money."
+ },
+ {
+  "id": "pashmina",
+  "name": "Changthang wool",
+  "unit": "bale",
+  "size": "medium",
+  "base": 14,
+  "slope": 0.38,
+  "cap": 2.8,
+  "prod": [
+   "ngari",
+   "sakya"
+  ],
+  "blurb": "The fine underwool of Tibetan highland goats, carried down to the weavers of Kashmir and Persia."
+ },
+ {
+  "id": "cowries",
+  "name": "Cowrie shells",
+  "unit": "string",
+  "size": "medium",
+  "base": 8,
+  "slope": 0.42,
+  "cap": 3,
+  "prod": [
+   "lakhnauti",
+   "sonargaon"
+  ],
+  "blurb": "Shells from the Maldives, used as small change in Bengal, and as money in Yunnan, Polo noted."
+ }
+]

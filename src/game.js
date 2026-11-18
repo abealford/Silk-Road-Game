@@ -1707,6 +1707,7 @@
     MX.cont = [new Path2D(), new Path2D()]; for (const c of D.contours) MX.cont[c[0]].addPath(toPath(c.slice(1), true));
     MX.states = D.states.map(st => { const p = new Path2D(); for (const r of st.polys) p.addPath(toPath(r, true)); return { p, st }; });
     MX.modern = D.modern.map(c => { const p = new Path2D(); for (const r of c.polys) p.addPath(toPath(r, true)); return { p, c }; });
+    if (typeof MARKET_LAYER !== 'undefined') { MX.mk = new Image(); MX.mk.onload = () => { MX.mkOk = true; if (mapOpen && mapLayer === 'markets') drawMap(); }; MX.mk.src = MARKET_LAYER.img; }
   }
   const inGame = (lon, lat) => lon >= GAMEBOX[0] && lon <= GAMEBOX[1] && lat >= GAMEBOX[2] && lat <= GAMEBOX[3];
   function mapMinZoom() { if (!MX.x1) return 5; return Math.max(mcv.width / (MX.x1 - MX.x0), mcv.height / (MX.y1 - MX.y0)); }
@@ -1737,6 +1738,8 @@
       for (const { p, st } of states) { g.save(); g.clip(p); g.strokeStyle = (st.col || '#888') + '70'; g.lineWidth = 7 * dpr / z; g.stroke(p); g.restore(); }
       g.strokeStyle = 'rgba(74,50,32,.82)'; g.lineWidth = 1.15 * dpr / z; g.lineJoin = 'round'; for (const { p } of states) g.stroke(p);
       g.restore();
+    } else if (mapLayer === 'markets') {
+      if (MX.mkOk) { const E = MARKET_LAYER.ext; g.save(); g.clip(land); g.globalAlpha = 0.42; g.imageSmoothingEnabled = true; g.drawImage(MX.mk, W.degX(E[0]), -W.degY(E[3]), W.degX(E[1]) - W.degX(E[0]), W.degY(E[3]) - W.degY(E[2])); g.restore(); }
     } else if (mapLayer === 'modern') {
       const mod = MX.modern || MP.modern; g.save(); g.clip(land);
       mod.forEach(({ p, c }) => { g.fillStyle = MODERN_TINT[(c.c || 1) % MODERN_TINT.length] + '55'; g.fill(p); });
@@ -1770,6 +1773,8 @@
       }
       if (mapLayer === '1272') for (const { st } of states) { if (!st.lab) continue; const [lo, la, sz, r] = st.lab; if (sz * lk < 0.55) continue;
         text(spaced(st.name.toUpperCase()), lo, la, 11.5 * sz * lk, inGame(lo, la) ? '#5a2a1a' : '#6a5a4a', r, 'italic # Bonum, "EB Garamond", Georgia, serif', inGame(lo, la) ? .82 : .72); }
+      if (mapLayer === 'markets' && typeof MARKETS_DATA !== 'undefined') for (const m of MARKETS_DATA) { const [lo, la] = m.lab;
+        text(spaced(m.name.toUpperCase()), lo, la, 12.5 * clamp(lk, .8, 1.4), m.color, 0, 'bold italic # Bonum, "EB Garamond", Georgia, serif', .9); }
       if (mapLayer === 'modern') for (const { c } of (MX.modern || MP.modern)) text(c.name.toUpperCase(), c.lab[0], c.lab[1], 11 * clamp(lk, .8, 1.3), 'rgba(90,40,70,.9)', 0, '# Bonum, "EB Garamond", Georgia, serif', .8);
       // cities beyond the caravan roads
       for (const c of D.cities) { if (!c.big && zs < 16) continue; const [sx, sy] = m2s(W.degX(c.lon), W.degY(c.lat)); const r = 3 * dpr * clamp(lk, .8, 1.3);
@@ -1781,8 +1786,19 @@
     for (const c of W.cities) {
       const [sx, sy] = m2s(c.X, c.Y); const r = (2.6 + c.size * 1.3) * dpr * fs;
       if (sx < -50 || sy < -50 || sx > mcv.width + 50 || sy > mcv.height + 50) continue;
+      const mk = mapLayer === 'markets' && typeof MARKET !== 'undefined' ? MARKETS[MARKET.of(c.id)] : null;
+      if (mk) {
+        const kind = MARKET.kind(c.id); const R = (kind === 'market' ? 8.5 : kind === 'city' ? 5 : 3.6) * dpr * fs;
+        if (MARKET.isHub(c.id)) { g.beginPath(); g.arc(sx, sy, R + 4.5 * dpr, 0, Math.PI * 2); g.strokeStyle = '#c9930a'; g.lineWidth = 2.6 * dpr; g.stroke(); }
+        if (MARKET.isSpecialty(c.id)) { const q = R + 4 * dpr; g.beginPath(); g.moveTo(sx, sy - q); g.lineTo(sx + q, sy); g.lineTo(sx, sy + q); g.lineTo(sx - q, sy); g.closePath(); g.fillStyle = mk.color + '66'; g.fill(); g.strokeStyle = '#2b1d10'; g.lineWidth = 1.4 * dpr; g.stroke(); }
+        g.beginPath();
+        if (kind === 'market') { for (let i = 0; i < 10; i++) { const a = Math.PI / 5 * i - Math.PI / 2, rr = i % 2 ? R * .45 : R; const x = sx + Math.cos(a) * rr, y = sy + Math.sin(a) * rr; i ? g.lineTo(x, y) : g.moveTo(x, y); } g.closePath(); }
+        else g.arc(sx, sy, R, 0, Math.PI * 2);
+        g.fillStyle = mk.color; g.fill(); g.lineWidth = 1.6 * dpr; g.strokeStyle = visited.has(c.id) ? '#fff6dc' : '#2b1d10'; g.stroke();
+      } else {
       g.beginPath(); g.arc(sx, sy, r, 0, Math.PI * 2);
       g.fillStyle = visited.has(c.id) ? '#3d2a18' : '#f7efdc'; g.fill(); g.lineWidth = 1.6 * dpr; g.strokeStyle = '#3d2a18'; g.stroke();
+      }
       if (c === hoverCity || c === mapSel) { g.beginPath(); g.arc(sx, sy, r + 4 * dpr, 0, Math.PI * 2); g.strokeStyle = '#b23a1e'; g.lineWidth = 2 * dpr; g.stroke(); }
       if (z > 16 * dpr || c.size >= 3 || (c.size >= 2 && z > 9 * dpr) || c === hoverCity || c === mapSel) {
         g.font = `${c.size >= 3 ? 'bold ' : ''}${Math.round((c.size >= 2 ? 13 : 11) * dpr * fs)}px Bonum, "EB Garamond", Georgia, serif`;
@@ -1836,6 +1852,7 @@
     g.beginPath(); g.arc(S0 / 2, S0 / 2, S0 / 2 - 2, 0, Math.PI * 2); g.lineWidth = 3 * dpr; g.strokeStyle = 'rgba(60,40,20,.85)'; g.stroke();
     g.fillStyle = '#3d2a18'; g.font = `bold ${Math.round(12 * dpr)}px Cinzel, serif`; g.fillText('N', S0 / 2, 14 * dpr);
   }
+  HK.toggleMap = f => toggleMap(f); // test hook (v19)
   function toggleMap(force) {
     mapOpen = force === undefined ? !mapOpen : force;
     mapEl.classList.toggle('show', mapOpen);
@@ -1849,7 +1866,9 @@
     const el = $('mapcard');
     if (!mapSel) { el.classList.remove('show'); return; }
     const c = mapSel;
-    el.innerHTML = `<div class="mn">${c.name}</div><div class="mp">${c.polity}</div><div class="mm">Today: ${c.modern}</div><p>${c.blurb}</p>
+    const mkC = typeof MARKET !== 'undefined' ? MARKETS[MARKET.of(c.id)] : null; const mkK = mkC ? MARKET.kind(c.id) : '';
+    const mkMakes = mkC ? MARKET.makes(c.id).map(id => `<span class="${MARKET.rarClass(id)}">${GOOD[id].name}</span>`).join(', ') : '';
+    el.innerHTML = `<div class="mn">${c.name}</div><div class="mp">${c.polity}</div>${mkC ? `<div class="mmk" style="--mk:${mkC.color}"><b>${mkC.name}</b> market · ${MARKET.kindName[mkK]} (${MARKET.slotsText[mkK]})${MARKET.isHub(c.id) ? ' · market capital' : ''}${MARKET.isSpecialty(c.id) ? ' · specialty town' : ''}${mkMakes ? `<br>Makes: ${mkMakes}` : ''}</div>` : ''}<div class="mm">Today: ${c.modern}</div><p>${c.blurb}</p>
       <div class="ml">${LANDMARKS.filter(l => l.city === c.id).map(l => '◆ ' + l.name).join('<br>')}</div>
       ${HK.noTeleport ? `<div class="mm">${HK.mapCityInfo ? HK.mapCityInfo(c) : ''}</div>` : `<button id="tp">Travel to ${c.name.replace(/ \(.*\)/, '')}</button>`}`;
     el.classList.add('show');
@@ -1882,9 +1901,10 @@
   $('zin').onclick = () => { mv.z = clamp(mv.z * 1.4, mapMinZoom(), 140); drawMap(); };
   $('zout').onclick = () => { mv.z = clamp(mv.z / 1.4, mapMinZoom(), 140); drawMap(); };
   $('mclose').onclick = () => toggleMap(false);
-  document.querySelectorAll('.layer').forEach(bt => bt.onclick = () => { mapLayer = bt.dataset.l; document.querySelectorAll('.layer').forEach(x => x.classList.toggle('on', x === bt)); drawMap(); });
+  document.querySelectorAll('.layer').forEach(bt => bt.onclick = () => { mapLayer = bt.dataset.l; document.querySelectorAll('.layer').forEach(x => x.classList.toggle('on', x === bt)); buildLegend(); drawMap(); });
   function buildLegend() {
     const D = typeof MAPX !== 'undefined' ? MAPX : null;
+    if (mapLayer === 'markets' && typeof MARKETS_DATA !== 'undefined') { $('legend').innerHTML = MARKETS_DATA.map(m => `<div><span style="background:${m.color}"></span>${m.name}</div>`).join('') + '<div class="lg2">★ Market city, 10 goods · ● City, 5–7 · • Town, 3–4<br>◆ Specialty town (epic and legendary goods) · ◯ gold ring: market capital</div>'; return; }
     $('legend').innerHTML = Object.values(ROUTE_GROUPS).map(g => `<div><span style="background:${g.color}"></span>${g.name}</div>`).join('') + '<div class="lg2"><i class="o"></i>City on the road · <i class="f"></i>Visited · <i class="sq"></i>Beyond the roads</div>'
       + (D ? `<div class="lgh">Elevation</div><div class="ramp">${D.hcol.map(c => `<b style="background:${c}"></b>`).join('')}</div><div class="rampl"><span>0</span><span>1,200</span><span>3,000</span><span>5,400 m</span></div>` : '');
   }

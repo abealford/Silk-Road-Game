@@ -72,7 +72,7 @@
 <div id="map">
   <canvas id="mapc"></canvas>
   <div class="mtitle"><div class="t">The Silk Roads</div><div class="s">Overland routes from Constantinople to Cathay, 1272</div></div>
-  <div class="mbtns"><button class="layer on" data-l="1272">States of 1272</button><button class="layer" data-l="modern">Modern borders</button><button class="layer" data-l="none">No borders</button><button class="layer" data-l="terrain">Terrain only</button><button id="zin">＋</button><button id="zout">－</button><button id="mclose">Close (M)</button></div>
+  <div class="mbtns"><button class="layer on" data-l="1272">States of 1272</button><button class="layer" data-l="markets">Markets</button><button class="layer" data-l="modern">Modern borders</button><button class="layer" data-l="none">No borders</button><button class="layer" data-l="terrain">Terrain only</button><button id="zin">＋</button><button id="zout">－</button><button id="mclose">Close (M)</button></div>
   <div id="mapcard"></div>
   <div id="legend"></div><div id="zoutnote">Zoomed all the way out</div>
   <div class="mhint">Drag to pan · scroll to zoom · click a city to travel<br><span style="font-size:12px;opacity:.8">Coastlines, lakes, rivers &amp; modern borders: Natural Earth · 1272 borders adapted from historical-basemaps (A. Ourednik), approximate</span></div>
@@ -96,6 +96,9 @@
 <!--#include script|src/game.js -->
 <!--#include script|src/econ.js -->
 <!--#include script|src/icons.js -->
+<!--#include script|src/markets_data.js -->
+<!--#include script|src/markets.js -->
+<!--#include script|src/markets_layer.js -->
 <!--#include script|src/events.js -->
 <!--#include script|src/journey.js -->
 <!--#include script|src/combat.js -->

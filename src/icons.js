@@ -81,6 +81,11 @@ const ICONS = (() => {
   I.alum = () => I.salt();
   I.mastic = () => `<circle cx="18" cy="26" r="5" fill="#f0e4a8" stroke="#2a1a10" stroke-width="1.4"/><circle cx="28" cy="22" r="4" fill="#e8d890" stroke="#2a1a10" stroke-width="1.4"/><circle cx="29" cy="31" r="4.5" fill="#f4ecb8" stroke="#2a1a10" stroke-width="1.4"/>`;
   const cache = {};
-  return function icon(id, size = 40) { const k = id + size; if (cache[k]) return cache[k]; const f = I[id] || (() => sack('#a88a5a', false)); return cache[k] = `<svg class="gi" width="${size}" height="${size}" viewBox="0 0 48 48">${bg}${f()}</svg>`; };
+  // v19: a rim in the good's rarity colour (grey commons keep the plain rim)
+  const RIM = { u: '#2e8b3a', r: '#2f6fd0', e: '#8a3fc0', l: '#c9930a' };
+  const rimOf = id => { const g = typeof GOOD !== 'undefined' && GOOD[id]; const c = g && RIM[g.rar]; return c ? `<circle cx="24" cy="24" r="22" fill="#efe0bd" stroke="${c}" stroke-width="3"/>` : bg; };
+  function icon(id, size = 40) { const k = id + size; if (cache[k]) return cache[k]; const f = I[id] || (() => sack('#a88a5a', false)); return cache[k] = `<svg class="gi" width="${size}" height="${size}" viewBox="0 0 48 48">${rimOf(id)}${f()}</svg>`; }
+  icon.T = { st, bolt, sack, jar, gems, nuggets, beads, flask }; icon.I = I;
+  return icon;
 })();
 

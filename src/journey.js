@@ -9,6 +9,7 @@
   let ui = null; // currently open panel name
   GOOD.tables = { id: 'tables', name: 'Astronomical tables', unit: 'crate', w: 1, base: 0, special: true, quest: true, blurb: 'A crate of tables from the observatory at Maragheh, to be delivered to the scholars of Samarkand.' };
   ECON.init(CITIES, EDGES);
+  Object.defineProperty(ECON, 'state', { get: () => S, configurable: true });
   const fmt = n => Math.round(n).toLocaleString('en-US');
   const fmt1 = n => (Math.round(n * 10) / 10).toLocaleString('en-US');
   const coinsHtml = n => `<span class="mx-c">${fmt(n)}</span>`;
@@ -221,10 +222,10 @@
         else { const taken = M.loseValue(toll - S.coins, c.id); S.coins = 0; msgs.push(`You cannot pay the ${R.name}'s toll of ${fmt(toll)}. The customs officers take goods instead: ${taken}`); } }
       S.lastRealm = realm;
     }
-    S.lastCity = c.id;
-    // restock market
-    const st = S.stock[c.id] || (S.stock[c.id] = { day: S.day, q: {} });
-    const dd = S.day - st.day; st.day = S.day; for (const g of ECON.offers(c.id)) { const mx = ECON.stockMax(g, c.id); st.q[g] = Math.min(mx, (st.q[g] ?? mx) + mx * dd / 40); }
+    const prevCity = S.lastCity; S.lastCity = c.id;
+    // v19: the merchant rolls a fresh set of goods after 3+ days away or a visit to another city
+    const hits = MARKET.arrive(S, c.id, prevCity);
+    if (hits.length) msgs.push(`The merchant has something special today: ${hits.map(g => `<b class="${MARKET.rarClass(g)}">${GOOD[g].name}</b> (${MARKET.rarName(g).toLowerCase()})`).join(', ')}.`);
     recordPrices(c.id);
     // quest: Maragheh tables
     if (c.id === 'samarkand' && S.cargo.tables) { delete S.cargo.tables; S.flags.tables_done = S.day; S.coins += 250; S.rep += 10; msgs.push('The scholars of Samarkand receive the tables from Maragheh with delight, and reward you with 250 dirhams.'); }
@@ -372,11 +373,12 @@
   }
   function renderMarket(c) {
     const st = S.stock[c.id] || { q: {} };
-    let h = qtyBar() + '<div class="mx-cols"><div><div class="mx-ct">For sale here</div><table class="mx-tb"><tr><th>Good</th><th>Price</th><th>Stock</th><th></th></tr>';
+    const mk0 = MARKETS[MARKET.of(c.id)]; const kd = MARKET.kind(c.id);
+    let h = qtyBar() + `<div class="mx-mk" style="--mk:${mk0 ? mk0.color : '#8a6a3a'}">${mk0 ? `<b>${mk0.name}</b> market` : ''} · ${MARKET.kindName[kd]}, ${MARKET.slotsText[kd]}${MARKET.isSpecialty(c.id) ? ' · <i>specialty town</i>' : ''} · stock changes after 3 days away</div>` + '<div class="mx-cols"><div><div class="mx-ct">For sale here</div><table class="mx-tb"><tr><th>Good</th><th>Price</th><th>Stock</th><th></th></tr>';
     for (const g of ECON.offers(c.id)) {
       const G = GOOD[g]; const p = ECON.buyPrice(S, g, c.id, S.day); const q = Math.floor(st.q[g] ?? ECON.stockMax(g, c.id)); const bk = bestKnown(g, c.id);
       const gg = goodGuide(g);
-      h += `<tr title="${G.blurb}" data-pg="${g}"><td class="mx-gc">${ICONS(g)}<div><b>${G.name}</b><br><span class="mx-dim">${SIZES[G.size || 'medium'].name}, ${G.w} load per ${G.unit} · sells best in ${gg.best}${bk ? `<br>best you've seen: ${fmt(bk.p)} at ${W.cityById[bk.cid].name.replace(/ \(.*\)/, '')}` : ''}</span></div></td><td>${fmt1(p)}</td><td>${q}</td><td><button data-act="buy" data-g="${g}" ${q < 1 || S.coins < p ? 'disabled' : ''}>Buy</button></td></tr>`;
+      h += `<tr title="${G.blurb}" data-pg="${g}"><td class="mx-gc">${ICONS(g)}<div><b class="${MARKET.rarClass(g)}">${G.name}</b> <span class="rar-tag ${MARKET.rarClass(g)}">${MARKET.rarName(g)}</span><br><span class="mx-dim">${SIZES[G.size || 'medium'].name}, ${G.w} load per ${G.unit} · sells best in ${gg.best}${bk ? `<br>best you've seen: ${fmt(bk.p)} at ${W.cityById[bk.cid].name.replace(/ \(.*\)/, '')}` : ''}</span></div></td><td>${fmt1(p)}</td><td>${q}</td><td><button data-act="buy" data-g="${g}" ${q < 1 || S.coins < p ? 'disabled' : ''}>Buy</button></td></tr>`;
     }
     h += '</table></div><div><div class="mx-ct">Your cargo</div><table class="mx-tb"><tr><th>Good</th><th>Have</th><th>Price here</th><th></th></tr>';
     const keys = Object.keys(S.cargo).filter(g => S.cargo[g] > 0);
@@ -385,7 +387,7 @@
       const G = GOOD[g];
       if (G.quest) { h += `<tr><td class="mx-gc">${ICONS(g)}<div><b>${G.name}</b><br><span class="mx-dim">${G.dest || (g === 'letter' ? 'To deliver to Sarai' : 'To deliver to Samarkand')}</span></div></td><td>${S.cargo[g]}</td><td>—</td><td></td></tr>`; continue; }
       const p = ECON.sellPrice(S, g, c.id, S.day); const paid = S.basis[g] || 0; const cls = paid ? (p > paid * 1.02 ? 'mx-ok' : p < paid * .98 ? 'mx-bad' : '') : '';
-      h += `<tr title="${G.blurb}" data-pg="${g}" data-ref="${p.toFixed(2)}"><td class="mx-gc">${ICONS(g)}<div><b>${G.name}</b><br><span class="mx-dim">${paid ? 'paid ' + fmt1(paid) + ' each' : 'acquired on the road'} · best in ${goodGuide(g).best}</span></div></td><td>${S.cargo[g]}</td><td class="${cls}">${fmt1(p)}${paid ? `<br><span class="mx-dim">${p >= paid ? '+' : '−'}${fmt1(Math.abs(p - paid))} each</span>` : ''}</td><td><button data-act="sell" data-g="${g}">Sell</button> <button data-act="sell" data-g="${g}" data-all="1">All</button></td></tr>`;
+      h += `<tr title="${G.blurb}" data-pg="${g}" data-ref="${p.toFixed(2)}"><td class="mx-gc">${ICONS(g)}<div><b class="${MARKET.rarClass(g)}">${G.name}</b><br><span class="mx-dim">${paid ? 'paid ' + fmt1(paid) + ' each' : 'acquired on the road'} · best in ${goodGuide(g).best}</span></div></td><td>${S.cargo[g]}</td><td class="${cls}">${fmt1(p)}${paid ? `<br><span class="mx-dim">${p >= paid ? '+' : '−'}${fmt1(Math.abs(p - paid))} each</span>` : ''}</td><td><button data-act="sell" data-g="${g}">Sell</button> <button data-act="sell" data-g="${g}" data-all="1">All</button></td></tr>`;
     }
     h += '</table></div></div>' + renderContracts(c) + '<div class="mx-note">Your reputation of ${Math.round(S.rep)} gets you <b>${(ECON.repBonus(S) * 100).toFixed(1)}%</b> better prices, buying and selling (up to 8% at 100). Prices fall as you sell and rise as you buy; markets recover over weeks. An interpreter gets you better prices too.</div>';
     return h;
@@ -432,9 +434,9 @@
   const hopCache = {};
   function hopsFrom(src) { if (hopCache[src]) return hopCache[src]; const adj = ECON.adj(); const h = { [src]: 0 }; let q = [src]; while (q.length) { const nq = []; for (const u of q) for (const [v] of adj[u] || []) if (!(v in h)) { h[v] = h[u] + 1; nq.push(v); } q = nq; } return hopCache[src] = h; }
   function cityContracts(c) {
-    const period = Math.floor(S.day / 25); let seed = 0; for (const ch of c.id + period + (S.char || '') + (S.seed || '')) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+    const period = 'v' + ((S.stock[c.id] && S.stock[c.id].visit) || 0); let seed = 0; for (const ch of c.id + period + (S.char || '') + (S.seed || '')) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
     const r = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-    const goods = ECON.offers(c.id).filter(g => !GOOD[g].special); if (!goods.length) return [];
+    const goods = ECON.offers(c.id).filter(g => !GOOD[g].special && 'cur'.includes(GOOD[g].rar || 'c')); if (!goods.length) return [];
     const dist = distFrom(c.id), hops = hopsFrom(c.id); const out = [];
     const cands = W.cities.filter(o => o.id !== c.id && !o.holy && hops[o.id] >= 2 && hops[o.id] <= 5);
     for (let i = 0; i < 3 && cands.length; i++) {
@@ -545,17 +547,21 @@
       h += '<div class="mx-scroll"><table class="mx-tb mx-grid"><tr><th>Selling price</th>' + cs.map(c => `<th>${W.cityById[c].name.replace(/ \(.*\)/, '')}<br><span class="mx-dim">day ${S.seen[c].day}</span></th>`).join('') + '</tr>';
       const gl = GOODS.filter(g => cs.some(c => S.seen[c].buy[g.id]) || S.cargo[g.id]);
       for (const g of gl) { const vals = cs.map(c => S.seen[c].sell[g.id]); const mx = Math.max(...vals), mn = Math.min(...vals);
-        h += `<tr><td><b>${g.name}</b></td>${cs.map((c, i) => { const b = S.seen[c].buy[g.id]; return `<td class="${vals[i] === mx ? 'mx-ok' : vals[i] === mn ? 'mx-bad' : ''}">${fmt(vals[i])}${b ? `<br><span class="mx-dim">buy ${fmt(b)}</span>` : ''}</td>`; }).join('')}</tr>`; }
+        h += `<tr><td><b class="${MARKET.rarClass(g.id)}">${g.name}</b></td>${cs.map((c, i) => { const b = S.seen[c].buy[g.id]; return `<td class="${vals[i] === mx ? 'mx-ok' : vals[i] === mn ? 'mx-bad' : ''}">${fmt(vals[i])}${b ? `<br><span class="mx-dim">buy ${fmt(b)}</span>` : ''}</td>`; }).join('')}</tr>`; }
       h += '</table></div><div class="mx-note">Green is the best selling price you have seen, red the worst. "Buy" marks where a good was on sale.</div>';
     } else if (tab === 'goods') {
-      h += '<div class="mx-goods">' + GOODS.concat([GOOD.holyoil]).map(g => { const gg = goodGuide(g.id); return `<div class="mx-good">${ICONS(g.id, 48)}<div><b>${g.name}</b> <span class="mx-dim">${g.w} load per ${g.unit}</span><br><span class="mx-lab">Made in</span> ${gg.made}<br><span class="mx-lab">Sells best</span> ${gg.best}${gg.bestCities.length ? ` <span class="mx-dim">(${gg.bestCities.join(', ')})</span>` : ''}<br><span class="mx-dim">${g.blurb}</span></div></div>`; }).join('') + '</div>';
+      // v19: grouped by market, rarest first
+      const card = g => { const gg = goodGuide(g.id); return `<div class="mx-good">${ICONS(g.id, 48)}<div><b class="${MARKET.rarClass(g.id)}">${g.name}</b> <span class="rar-tag ${MARKET.rarClass(g.id)}">${MARKET.rarName(g.id)}</span> <span class="mx-dim">${g.w} load per ${g.unit}</span><br><span class="mx-lab">Made in</span> ${gg.made}<br><span class="mx-lab">Sells best</span> ${gg.best}${gg.bestCities.length ? ` <span class="mx-dim">(${gg.bestCities.join(', ')})</span>` : ''}<br><span class="mx-dim">${g.blurb}</span></div></div>`; };
+      h += '<div class="mx-note">Each market sells its own goods. They fetch little at home and more the further you carry them, most of all in markets that want that kind of good. Commons are always on sale; uncommon, rare, epic and legendary goods turn up by chance, and the rarest only in the towns that make them or in the market\'s capital.</div>';
+      for (const mid of MARKET_ORDER) { const M = MARKETS[mid]; const gs = MARKET.goodsOf(mid).slice().sort((a, b) => RAR_ORDER.indexOf(b.rar) - RAR_ORDER.indexOf(a.rar) || a.name.localeCompare(b.name)); if (mid === 'mamluk') gs.unshift(GOOD.holyoil);
+        h += `<div class="mx-mk" style="--mk:${M.color}"><b>${M.name}</b> · capital ${W.cityById[M.hub].name.replace(/ \(.*\)/, '')}</div><div class="mx-goods">` + gs.map(card).join('') + '</div>'; }
     } else if (tab === 'rumours') {
       h += S.rumours.length ? '<ul class="mx-list">' + S.rumours.slice(-14).reverse().map(r => `<li>${r}</li>`).join('') + '</ul>' : '<p>You have heard no rumours yet. Travellers on the road often share news of distant markets.</p>';
     } else if (tab === 'news') h += renderMarketNews();
     else if (tab === 'factions') h += factionsJournalHtml();
     else if (tab === 'calendar') h += renderCalendar();
     else if (tab === 'goal') h += (S.camp ? campJournalHtml() : goalHtml()) + ((S.contracts || []).length ? '<div class="mx-ct">Delivery contracts</div><ul class="mx-list">' + S.contracts.map(k => `<li data-route="${k.from || nearestCityId()}|${k.to}" style="cursor:help">${k.n} ${GOOD[k.g].unit}s of ${lcName(GOOD[k.g].name)} to <b>${W.cityById[k.to].name}</b> (${fmt(mi(k.km))} mi) by day ${Math.floor(k.due)}: ${fmt(k.reward)} ${CURRENCY}</li>`).join('') + '</ul>' : '');
-    else h += `<ul class="mx-list"><li>Buy goods where they are made and sell them far away. Silk, porcelain and tea get dearer the further west you go; coral, amber, glass and woollens the further east.</li>
+    else h += `<ul class="mx-list"><li>The roads are divided into <b>eleven markets</b> (see the <b>Markets</b> layer on the map, <b>M</b>). Each sells its own goods, which fetch little at home and more the further you carry them, most of all in markets that want that kind of good: the Indian kingdoms pay most for horses, the Chinese for spices and gems.</li><li>Goods come in five rarities: <span class="rar-c">common</span>, <span class="rar-u">uncommon</span>, <span class="rar-r">rare</span>, <span class="rar-e">epic</span> and <span class="rar-l">legendary</span>. Commons are always on sale; the rest turn up by chance, and the rarest only in the towns that make them (◆ on the map) or in the market's capital. A merchant's stock changes once you have been away three days or visited another city.</li>
       <li>Each road shows its travel time, and whether your food, water and fodder will last.</li><li>Press <b>R</b> in any city to restock supplies for any road out, or to fill up. Supplies take cargo space (20 rations or fodder bundles, or 10 waterskins, per load).</li><li>Merchants offer <b>delivery contracts</b>: carry their goods to another city and get paid on arrival, with nothing paid up front.</li><li>Pack animals, carts and wagons carry more, but every animal eats, and carts cannot cross the mountains.</li>
       <li>Crossing into a new realm costs a toll on your cargo. A Mongol paiza halves it in Mongol lands.</li><li>Guards, archers, weapons and armour raise your strength against bandits. A guide reduces trouble and finds the wells.</li>
       <li>Selling a lot in one place drives the price down. Spread your sales across several markets.</li><li>If you are robbed or your caravan collapses, you lose your goods but keep your silver.</li></ul>`;
@@ -1164,12 +1170,12 @@
     return m === 4 ? 'The feast at the end of Ramadan' : m === 5 || m === 6 ? 'The Feast of Sacrifice' : m === 9 ? 'The Prophet\'s birthday' : 'The great market fair';
   }
   const MKT_TYPES = [
-    { id: 'famine', title: c => `Famine in ${c.name}`, text: 'The harvest has failed. Food of every kind fetches famine prices, and provisions are dear.', goods: ['dates', 'fruit', 'sugar', 'salt', 'olive', 'tea'], mult: 2.2, supply: 2, ok: c => true },
-    { id: 'wedding', title: c => `A royal wedding at ${c.name}`, text: 'A prince is to marry, and the court is buying silks, jewels and perfumes for the feast.', goods: ['silk', 'brocade', 'pearls', 'rubies', 'rosewater', 'coral', 'amber', 'emeralds'], mult: 1.9, ok: c => ECON.tierOf(c) >= 2 },
+    { id: 'famine', title: c => `Famine in ${c.name}`, text: 'The harvest has failed. Food of every kind fetches famine prices, and provisions are dear.', goods: ['dates', 'fruit', 'sugar', 'salt', 'olive', 'tea'], types: 'F', mult: 2.2, supply: 2, ok: c => true },
+    { id: 'wedding', title: c => `A royal wedding at ${c.name}`, text: 'A prince is to marry, and the court is buying silks, jewels and perfumes for the feast.', goods: ['silk', 'brocade', 'pearls', 'rubies', 'rosewater', 'coral', 'amber', 'emeralds'], types: 'TG', mult: 1.9, ok: c => ECON.tierOf(c) >= 2 },
     { id: 'army', title: c => `An army gathers at ${c.name}`, text: 'Troops are mustering for a campaign and buying tack, blades, felt and furs.', goods: ['horsegear', 'blades', 'felt', 'wool', 'furs', 'buckram'], mult: 2.0, ok: c => ['ilkhan', 'chagatai', 'horde', 'yuan', 'mamluk', 'delhi', 'song'].includes(ECON.realmOf(c.id)) },
-    { id: 'festival', title: c => `${festName(c)} in ${c.name}`, text: 'The city is preparing a great festival and wants incense, fragrant woods, wax and fine cloth.', goods: ['incense', 'rosewater', 'sandalwood', 'aloeswood', 'wax', 'muslin', 'cottoncloth', 'saffron'], mult: 1.8, ok: c => true },
-    { id: 'building', title: c => `A palace rises at ${c.name}`, text: 'A ruler is building, and craftsmen want lacquer, carpets, glass, porcelain and timber.', goods: ['lacquer', 'carpets', 'glass', 'porcelain', 'sandalwood', 'jade', 'tin'], mult: 1.8, ok: c => ECON.tierOf(c) >= 3 },
-    { id: 'plague', title: c => `Sickness in ${c.name}`, text: 'Fever has broken out. Doctors pay anything for rhubarb, musk, balsam and sal ammoniac.', goods: ['rhubarb', 'musk', 'balsam', 'salammoniac', 'cinnamon', 'ginger'], mult: 2.2, ok: c => true },
+    { id: 'festival', title: c => `${festName(c)} in ${c.name}`, text: 'The city is preparing a great festival and wants incense, fragrant woods, wax and fine cloth.', goods: ['incense', 'rosewater', 'sandalwood', 'aloeswood', 'wax', 'muslin', 'cottoncloth', 'saffron'], types: 'ST', mult: 1.8, ok: c => true },
+    { id: 'building', title: c => `A palace rises at ${c.name}`, text: 'A ruler is building, and craftsmen want lacquer, carpets, glass, porcelain and timber.', goods: ['lacquer', 'carpets', 'glass', 'porcelain', 'sandalwood', 'jade', 'tin'], types: 'AI', mult: 1.8, ok: c => ECON.tierOf(c) >= 3 },
+    { id: 'plague', title: c => `Sickness in ${c.name}`, text: 'Fever has broken out. Doctors pay anything for rhubarb, musk, balsam and sal ammoniac.', goods: ['rhubarb', 'musk', 'balsam', 'salammoniac', 'cinnamon', 'ginger'], types: 'S', mult: 2.2, ok: c => true },
     { id: 'glut', glut: true, title: c => `A glut at ${c.name}`, text: 'A huge caravan has just arrived and flooded the market. Its goods are going cheap.', goods: null, mult: 0.6, ok: c => ECON.offers(c.id).length > 1 },
   ];
   function mktActive(cid, day = S.day) { return (S.mkt || []).filter(e => e.city === cid && day >= e.start && day < e.end); }
@@ -1181,7 +1187,7 @@
     let pool = W.cities.filter(c => !c.holy && !live.some(e => e.city === c.id)); const dd = distFrom(nearestCityId()); const nearby = pool.filter(c => dd[c.id] < 2200); if (nearby.length && rnd() < 0.65) pool = nearby; const c = pick(pool);
     const types = MKT_TYPES.filter(t => t.ok(c)); const T = pick(types); const goods = {};
     if (T.glut) { const of = ECON.offers(c.id).filter(g => !GOOD[g].special); const g = pick(of); goods[g] = T.mult; }
-    else { const cand = T.goods.filter(g => GOOD[g] && !ECON.offers(c.id).includes(g)); const use = cand.length ? cand : T.goods.filter(g => GOOD[g]); for (let k = 0; k < Math.min(3, use.length); k++) { const g = use[(k * 7 + Math.floor(rnd() * use.length)) % use.length]; goods[g] = +(T.mult * (0.9 + rnd() * 0.2)).toFixed(2); } }
+    else { const pool0 = T.types ? GOODS.filter(g => g.m && g.m !== MARKET.of(c.id) && T.types.includes(g.type) && 'cur'.includes(g.rar)).map(g => g.id) : T.goods; const cand = pool0.filter(g => GOOD[g] && !ECON.offers(c.id).includes(g)); const use = cand.length ? cand : T.goods.filter(g => GOOD[g]); for (let k = 0; k < Math.min(3, use.length); k++) { const g = use[(k * 7 + Math.floor(rnd() * use.length)) % use.length]; goods[g] = +(T.mult * (0.9 + rnd() * 0.2)).toFixed(2); } }
     const len = 40 + Math.floor(rnd() * 60); const ev = { id: T.id + c.id + Math.floor(S.day), type: T.id, city: c.id, title: T.title(c), text: T.text, goods, supply: T.supply || 0, start: S.day, end: S.day + len };
     S.mkt.push(ev);
     const gl = Object.keys(goods).map(g => lcName(GOOD[g].name)).join(', ');
@@ -1280,7 +1286,7 @@
     if (ECON.tierOf(c) >= 3) types.push('dice');
     const type = types[Math.floor(r() * types.length)]; const id = c.id + Math.floor(S.day / 40) + type; const dist = distFrom(c.id), hops = hopsFrom(c.id);
     if (type === 'festival') { const ev = mktActive(c.id).find(e => e.type === 'festival'); return { id, type, title: 'A festival is coming', text: ev ? `${ev.title} is under way. ${ev.text}` : 'The guild says a festival is coming. Check the market news: festival goods sell for much more while it lasts.', ev }; }
-    if (type === 'commission') { const want = GOODS.filter(g => !g.special && !ECON.offers(c.id).includes(g.id)); const g = want[Math.floor(r() * want.length)]; const n = Math.max(1, Math.round((1 + r() * 1.5) / g.w)); const pay = Math.round(n * ECON.mid(g.id, c.id, S.day) * 1.7);
+    if (type === 'commission') { const want = GOODS.filter(g => !g.special && 'cur'.includes(g.rar || 'c') && g.m !== MARKET.of(c.id) && !ECON.offers(c.id).includes(g.id)); const g = want[Math.floor(r() * want.length)]; const n = Math.max(1, Math.round((1 + r() * 1.5) / g.w)); const pay = Math.round(n * ECON.mid(g.id, c.id, S.day) * 1.7);
       return { id, type, g: g.id, n, pay, days: 120, title: 'The governor\'s commission', text: `The governor's steward wants ${n} ${g.unit}${n > 1 ? 's' : ''} of ${lcName(g.name)} within 120 days and will pay ${fmt(pay)} ${CURRENCY}, about 70% over the market price.` }; }
     if (type === 'book') { const cands = W.cities.filter(o => hops[o.id] >= 2 && hops[o.id] <= 5 && !o.holy); const to = cands[Math.floor(r() * cands.length)]; const pay = Math.round(40 + dist[to.id] * 0.06 + r() * 30);
       return { id, type, to: to.id, pay, days: Math.ceil(dist[to.id] / 15) + 15, title: 'A scholar\'s book', text: `A scholar asks you to carry a precious manuscript to a colleague in ${to.name} (${fmt(mi(dist[to.id]))} mi). It weighs almost nothing. Reward ${fmt(pay)} ${CURRENCY} and reputation.` }; }
@@ -1644,7 +1650,7 @@
   // ---------------- the house's own contracts ----------------
   function facContracts(c, f) {
     const F = FACTIONS[f]; const period = Math.floor(S.day / 25); const r = seeded('fac' + f + c.id + period); const dist = distFrom(c.id), hops = hopsFrom(c.id);
-    const dests = F.cities.filter(id => id !== c.id && dist[id] < Infinity); const goods = ECON.offers(c.id).filter(g => !GOOD[g].special); if (!dests.length || !goods.length) return [];
+    const dests = F.cities.filter(id => id !== c.id && dist[id] < Infinity); const goods = ECON.offers(c.id).filter(g => !GOOD[g].special && 'cur'.includes(GOOD[g].rar || 'c')); if (!dests.length || !goods.length) return [];
     const out = []; const bonus = FS()[f].m && FS()[f].s >= 10 ? 1.2 : 1;
     for (let i = 0; i < 2; i++) { const to = dests[Math.floor(r() * dests.length)]; const g = goods[Math.floor(r() * goods.length)]; const G = GOOD[g]; const km = dist[to];
       const n = Math.max(1, Math.round((1 + r()) / G.w)); const id = `f-${f}-${c.id}-${period}-${i}`; if (S.takenC && S.takenC[id]) continue; if (out.some(k => k.to === to && k.g === g)) continue;
@@ -1955,7 +1961,7 @@
   // ---------------- property: warehouses, caravanserai shares, workshops ----------------
   const WH_COST = { 1: 250, 2: 350, 3: 500, 4: 700, 5: 900 }; const WH_CAP = 60; const SERAI_COST = 600, SERAI_RENT = 22, SHOP_COST = 800;
   const WORKSHOPS = {
-    silk: { name: 'Silk workshop', in: [['rawsilk', 2]], out: 'brocade', per: 15, cities: ['tabriz', 'baghdad', 'yazd', 'herat', 'nishapur'], blurb: 'Weavers turn 2 bales of raw silk into a bolt of gold brocade.' },
+    silk: { name: 'Silk workshop', in: [['rawsilk', 5]], out: 'brocade', per: 8, cities: ['tabriz', 'baghdad', 'yazd', 'herat', 'nishapur'], blurb: 'Weavers turn 5 bales of raw silk into a bolt of gold brocade.' },
     dye: { name: 'Dye works', in: [['wool', 1], ['alum', 1]], out: 'scarlet', per: 10, cities: ['constantinople', 'trebizond', 'acre'], blurb: 'Dyers fix kermes red on Flemish woollens with alum: one bolt and one sack make a bolt of scarlet broadcloth.' },
   };
   const P = () => (S.prop = S.prop || {}); const PC = cid => (P()[cid] = P()[cid] || {});
@@ -2071,6 +2077,7 @@
     ov.classList.add('show');
   }
   { const st = document.createElement('style'); st.textContent = 'body:not(.journey) .mx-hud { display:none; }'; document.head.appendChild(st); }
+  window.__v19 = { S: () => S, arrive: id => H.onCity(W.cityById[id]), market: id => renderMarket(W.cityById[id]), contracts: id => cityContracts(W.cityById[id]), journal: t => { panelState.tab = t; return renderJournal(); }, openMerchant: () => { panelState.vendor = { name: 'Merchant', role: 'merchant' }; panelState.mtab = 'market'; openUI('vendor'); }, openJournal: t => { panelState.tab = t; openUI('journal'); }, act: (a, d) => act(a, d), goto: id => { H.placeAtCity(id); H.onCity(W.cityById[id]); } };
   window.__v18 = { lanes, openFreeHarbour: id => openFreeHarbour(W.cityById[id]), startVoyage: (i) => startVoyage(lanes()[i], nearestCityId()), voy: () => voy, wars, activeWars, warClosed, setSleep: v => { if (voy) voy.sleep = v; } };
 
   // ---------------- per-frame ----------------
