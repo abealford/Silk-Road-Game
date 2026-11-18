@@ -8,8 +8,7 @@ Act I   Acre -> Constantinople along the story route (Damascus, Aleppo, Ayas, Ko
         100 dirhams, 8 loads on foot, the 90-dirham linen contract to Aleppo. Two players: one who only
         trades at Acre ("one trade") and one who trades at every stop ("route trader").
 Act II  From Constantinople with the route trader's silver. Stables open: pack animals, camel drivers,
-        speed upgrades. Ends at net worth 1,500 with 3+ animals and 3 cities not seen in Act I
-        (the game's 'three markets you have not seen before').
+        speed upgrades. Ends at net worth 1,500 with 3+ animals and sales in 3 different markets.
 Act III Ends at Khanbaliq or Shangdu with net worth 6,000. Two policies: "greedy" trades anywhere until
         6,000 and then heads east; "eastward" only takes legs that bring it closer to Khanbaliq.
 
@@ -88,10 +87,11 @@ tf_stock = lambda c: 0.6 + 0.2 * TIER.get(c, 1)
 VARIANTS = {
     'v19': dict(desc='v19.0 as built', K=dict(c=.27, u=.30, r=.33, e=.36, l=.40), CAP=dict(c=3.5, u=4, r=4.5, e=5, l=6), P=0,
                 SM=dict(bulky=1, medium=1, compact=1), stock='old', sat='old', livestock=False),
-    'recommended': dict(desc='tuned for the story pace, with the border fix', K=dict(c=1.1, u=.9, r=.7, e=.6, l=.5),
+    'recommended': dict(desc='v19.1: tuned for the story pace, border fix, rare goods matter more', K=dict(c=1.0, u=.95, r=.95, e=.9, l=.85),
                         CAP=dict(c=3.25, u=3.9, r=5.2, e=6.5, l=7.8), P=.6, R=1000, ramp_from='border', inmarket=True,
                         SM=dict(bulky=1.25, medium=1, compact=.85), stock='budget', sat='value', livestock=True,
-                        B=dict(c=750, u=650, r=750, e=750, l=750), SATV=3000),
+                        B=dict(c=750, u=650, r=1500, e=1500, l=1500), SATV=3000,
+                        CH={'u': .4, 'r': .5, 'e': .25, 'l': .08}, wide=True),
     'fast': dict(desc='tuned for pace without the border fix (border cities become gateways)', K=dict(c=.55, u=.45, r=.35, e=.30, l=.25), CAP=dict(c=2.5, u=3, r=4, e=5, l=6), P=.4, R=1000,
                   SM=dict(bulky=1.25, medium=1, compact=.85), stock='budget', sat='value', livestock=True,
                   B=dict(c=300, u=260, r=300, e=300, l=300), SATV=1200),
@@ -124,21 +124,22 @@ class Econ:
         for gid, x in s.G.items():
             g = x['g']
             if g['m'] != m['id'] or g['rar'] != r: continue
-            if r in 'cu' or c in g['prod'] or (r == 'r' and c in m['stars']) or (r in 'el' and c == m['hub']): out.append(gid)
+            wide = s.V.get('wide')
+            if r in 'cu' or c in g['prod'] or (r == 'r' and (wide or c in m['stars'])) or (r == 'e' and wide and c in m['stars']) or (r in 'el' and c == m['hub']): out.append(gid)
         return out
     def offers(s, c, rnd):
         m = MK[CM[c]]; n = 10 if c in m['stars'] else (5 + rnd.randrange(3) if TIER.get(c, 1) >= 2 else 3 + rnd.randrange(2))
         cs = s.elig(c, 'c'); prod = [g for g in cs if c in s.G[g]['g']['prod']]
         cs = sorted(cs, key=lambda g: rnd.random() / (3 if g in prod else 1))
         us = s.elig(c, 'u'); rnd.shuffle(us); off = (cs + us)[:n]
-        CH = {'u': .4, 'r': .2, 'e': .125, 'l': .05}
+        CH = s.V.get('CH', {'u': .4, 'r': .2, 'e': .125, 'l': .05})
         for r in 'urel':
             el = [g for g in s.elig(c, r) if g not in off]
             p = CH[r] * (2 if r in 'el' and c in m['special'] and any(c in s.G[g]['g']['prod'] for g in el) else 1)
             if el and rnd.random() < p:
                 cm = [g for g in off if s.G[g]['r'] == 'c']
                 if cm and len(off) >= n: off.remove(rnd.choice(cm))
-                off.append(rnd.choice(el))
+                w = [3 if c in s.G[g]['g']['prod'] else 1 for g in el]; off.append(rnd.choices(el, w)[0])
         QTY = {'c': (10, 25), 'u': (5, 12), 'r': (2, 5), 'e': (1, 2), 'l': (1, 1)}; out = {}
         for gid in off:
             x = s.G[gid]
@@ -146,6 +147,7 @@ class Econ:
                 lo, hi = QTY[x['r']]; q = rnd.randint(lo, hi) * (.5 if x['size'] == 'bulky' else 1) * tf_stock(c)
             else:
                 q = s.V.get('B', BUDGET)[x['r']] * tf_stock(c) / x['price'][c] * rnd.uniform(.7, 1.3)
+                if s.V.get('CH'): q = min(q, {'l': 2, 'e': 3}.get(x['r'], 1e9))   # v19.1 caps epics at 3 and legendaries at 2
             out[gid] = max(1, round(q))
         return out
     def E(s, gid, c):  # saturation elasticity in units
@@ -234,7 +236,7 @@ class Trader:
             s.log['profit_by_rar'][x['r']] = s.log['profit_by_rar'].get(x['r'], 0) + pr
             s.log['profit_by_size'][x['size']] = s.log['profit_by_size'].get(x['size'], 0) + pr
             s.log['tolls'] += cost * TOLLF[c][dst]
-            if CM[dst] != 'byz': s.markets_sold.add(CM[dst])
+            s.markets_sold.add(CM[dst])
         s.log['leglist'].append((CD[c][dst], (sum(i[3] for i in items) + cpay - run) / t))
         s.coins += cpay - run; s.log['contracts'] += cpay; s.log['costs'] += run; s.log['legs'] += 1; s.log['km'] += CD[c][dst]
         s.contracts = [k for k in s.contracts if k[0] != dst]
@@ -320,12 +322,12 @@ def acts23(E, seed, coins, day, policy='greedy'):
     while T.day < 3000:
         T.shop(used)
         if 'II' not in out:
-            if T.nw() >= 1500 and T.animals >= 3 and len(T.visited) >= 3:
+            if T.nw() >= 1500 and T.animals >= 3 and len(T.markets_sold) >= 3:
                 out['II'] = T.day
             else:
                 allowed = [d for d in CITIES if d != T.c and 100 <= CD[T.c][d] <= 2500]
-                if T.nw() >= 1500 and len(T.visited) < 3:   # the objective sends the player somewhere new
-                    allowed = [d for d in allowed if d not in T.seen0 and d not in T.visited] or allowed
+                if T.nw() >= 1200 and len(T.markets_sold) < 3:   # the objective sends the player to sell in a third market
+                    allowed = [d for d in allowed if CM[d] not in T.markets_sold] or allowed
                 used = T.leg(allowed, near_market_city(T.c)); continue
         dk = lambda x: min(CD[x]['khanbaliq'], CD[x]['shangdu'])
         if T.c in ('khanbaliq', 'shangdu') and T.nw() >= 6000:

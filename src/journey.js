@@ -51,7 +51,7 @@
   function load(s = S) { let l = 0; for (const g in s.cargo) l += GOOD[g].w * s.cargo[g]; for (const k of (s.contracts || [])) l += GOOD[k.g].w * k.n; return l + s.food * SUPPLY_W.food + s.fodder * SUPPLY_W.fodder + s.water * SUPPLY_W.water; }
   function draftCount(s = S) { return (s.veh.cart || 0) + 2 * (s.veh.wagon || 0); }
   function animalCount(s = S) { return s.packCount() + draftCount(s) + (s.mount !== 'foot' ? 1 : 0); }
-  function fodderUse(s = S) { let f = s.mount !== 'foot' ? MOUNTS[s.mount].fodder : 0; for (const k in s.pack) f += PACK[k].fodder * s.pack[k]; for (const k in s.veh) f += VEHICLES[k].fodder * s.veh[k]; return f; }
+  function fodderUse(s = S) { let f = s.mount !== 'foot' ? MOUNTS[s.mount].fodder : 0; for (const k in s.pack) f += PACK[k].fodder * s.pack[k]; for (const k in s.veh) f += VEHICLES[k].fodder * s.veh[k]; for (const g in s.cargo) if (GOOD[g] && GOOD[g].fodder) f += GOOD[g].fodder * s.cargo[g]; return f; }
   function waterUse(s = S) { let w = s.people(); if (s.mount !== 'foot') w += MOUNTS[s.mount].water; for (const k in s.pack) w += PACK[k].water * s.pack[k]; for (const k in s.veh) w += VEHICLES[k].water * s.veh[k]; return w * 0.5; }
   function wages(s = S) { let w = 0; for (const k in s.hires) w += HIRES[k].wage * s.hires[k]; if (s.speed && s.speed.master) w += SPEED_UPS.master.wage; return w; }
   function strength(s = S) {
@@ -198,7 +198,7 @@
   function loseAnimalQuiet() { const r = M.loseAnimal(); H.showToast('Animal lost', r, 'Caravan'); }
   function dropOverflow() {
     let over = load() - capacity(); if (over <= 0.01) return; const dropped = [];
-    const order = Object.keys(S.cargo).filter(g => !GOOD[g].quest).sort((a, b) => ECON.mid(a, nearestCityId(), S.day) / GOOD[a].w - ECON.mid(b, nearestCityId(), S.day) / GOOD[b].w);
+    const order = Object.keys(S.cargo).filter(g => !GOOD[g].quest && GOOD[g].w > 0).sort((a, b) => ECON.mid(a, nearestCityId(), S.day) / GOOD[a].w - ECON.mid(b, nearestCityId(), S.day) / GOOD[b].w);
     for (const g of order) { while (over > 0.01 && S.cargo[g] > 0) { S.cargo[g]--; over -= GOOD[g].w; dropped.push(g); } if (!S.cargo[g]) delete S.cargo[g]; }
     while (over > 0.01 && S.fodder > 1) { S.fodder--; over -= SUPPLY_W.fodder; }
     if (dropped.length) H.showToast('Too heavy', `With fewer animals you must abandon ${dropped.length} ${dropped.length > 1 ? 'loads' : 'load'} of the cheapest goods.`, 'Caravan');
@@ -378,7 +378,7 @@
     for (const g of ECON.offers(c.id)) {
       const G = GOOD[g]; const p = ECON.buyPrice(S, g, c.id, S.day); const q = Math.floor(st.q[g] ?? ECON.stockMax(g, c.id)); const bk = bestKnown(g, c.id);
       const gg = goodGuide(g);
-      h += `<tr title="${G.blurb}" data-pg="${g}"><td class="mx-gc">${ICONS(g)}<div><b class="${MARKET.rarClass(g)}">${G.name}</b> <span class="rar-tag ${MARKET.rarClass(g)}">${MARKET.rarName(g)}</span><br><span class="mx-dim">${SIZES[G.size || 'medium'].name}, ${G.w} load per ${G.unit} · sells best in ${gg.best}${bk ? `<br>best you've seen: ${fmt(bk.p)} at ${W.cityById[bk.cid].name.replace(/ \(.*\)/, '')}` : ''}</span></div></td><td>${fmt1(p)}</td><td>${q}</td><td><button data-act="buy" data-g="${g}" ${q < 1 || S.coins < p ? 'disabled' : ''}>Buy</button></td></tr>`;
+      h += `<tr title="${G.blurb}" data-pg="${g}"><td class="mx-gc">${ICONS(g)}<div><b class="${MARKET.rarClass(g)}">${G.name}</b> <span class="rar-tag ${MARKET.rarClass(g)}">${MARKET.rarName(g)}</span><br><span class="mx-dim">${G.livestock ? `Livestock: walks with the caravan, eats ${G.fodder} fodder a day` : `${SIZES[G.size || 'medium'].name}, ${G.w} load per ${G.unit}`} · sells best in ${gg.best}${bk ? `<br>best you've seen: ${fmt(bk.p)} at ${W.cityById[bk.cid].name.replace(/ \(.*\)/, '')}` : ''}</span></div></td><td>${fmt1(p)}</td><td>${q}</td><td><button data-act="buy" data-g="${g}" ${q < 1 || S.coins < p ? 'disabled' : ''}>Buy</button></td></tr>`;
     }
     h += '</table></div><div><div class="mx-ct">Your cargo</div><table class="mx-tb"><tr><th>Good</th><th>Have</th><th>Price here</th><th></th></tr>';
     const keys = Object.keys(S.cargo).filter(g => S.cargo[g] > 0);
@@ -436,7 +436,7 @@
   function cityContracts(c) {
     const period = 'v' + ((S.stock[c.id] && S.stock[c.id].visit) || 0); let seed = 0; for (const ch of c.id + period + (S.char || '') + (S.seed || '')) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
     const r = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
-    const goods = ECON.offers(c.id).filter(g => !GOOD[g].special && 'cur'.includes(GOOD[g].rar || 'c')); if (!goods.length) return [];
+    const goods = ECON.offers(c.id).filter(g => !GOOD[g].special && !GOOD[g].livestock && 'cur'.includes(GOOD[g].rar || 'c')); if (!goods.length) return [];
     const dist = distFrom(c.id), hops = hopsFrom(c.id); const out = [];
     const cands = W.cities.filter(o => o.id !== c.id && !o.holy && hops[o.id] >= 2 && hops[o.id] <= 5);
     for (let i = 0; i < 3 && cands.length; i++) {
@@ -636,7 +636,7 @@
       case 'contract': { const k = cityContracts(c).find(k => k.id === d.id); if (!k) break; if ((S.contracts || []).length >= 3) { H.showToast('Too many contracts', 'You can carry at most three contracts at once.', 'Contracts'); break; } if (load() + GOOD[k.g].w * k.n > capacity() + 1e-6) { H.showToast('No room', 'Your animals cannot carry this consignment.', 'Contracts'); break; }
         (S.contracts = S.contracts || []).push(Object.assign({}, k, { due: S.day + k.days })); (S.takenC = S.takenC || {})[k.id] = 1; break; }
       case 'buy': { const g = d.g; const st = S.stock[c.id]; let n = 0; for (let k = 0; k < q; k++) { const p = ECON.buyPrice(S, g, c.id, S.day); if (S.coins < p || (st.q[g] ?? 0) < 1) break; if (load() + GOOD[g].w > capacity() + 1e-6) { H.showToast('No room', 'Your animals cannot carry any more.', 'Caravan'); break; } spend(p); const have = S.cargo[g] || 0; S.basis[g] = ((S.basis[g] || 0) * have + p) / (have + 1); S.cargo[g] = have + 1; st.q[g]--; (S.sat[c.id] = S.sat[c.id] || {})[g] = (S.sat[c.id][g] || 0) - 1; n++; } if (g === 'holyoil' && n) S.rep += 3; break; }
-      case 'sell': { const g = d.g; const qq = d.all ? 1e9 : q; for (let k = 0; k < qq && S.cargo[g] > 0; k++) { const p = ECON.sellPrice(S, g, c.id, S.day); S.coins += p; S.cargo[g]--; (S.sat[c.id] = S.sat[c.id] || {})[g] = (S.sat[c.id][g] || 0) + 1; } if (!S.cargo[g]) { delete S.cargo[g]; delete S.basis[g]; } S.rep = Math.min(100, S.rep + 0.15 * Math.min(q, 25)); break; }
+      case 'sell': { const g = d.g; const qq = d.all ? 1e9 : q; if (S.camp && S.camp.act === 2 && S.cargo[g] > 0) { const mk = MARKET.of(c.id); S.camp.mk2 = S.camp.mk2 || []; if (mk && !S.camp.mk2.includes(mk)) S.camp.mk2.push(mk); } for (let k = 0; k < qq && S.cargo[g] > 0; k++) { const p = ECON.sellPrice(S, g, c.id, S.day); S.coins += p; S.cargo[g]--; (S.sat[c.id] = S.sat[c.id] || {})[g] = (S.sat[c.id][g] || 0) + 1; } if (!S.cargo[g]) { delete S.cargo[g]; delete S.basis[g]; } S.rep = Math.min(100, S.rep + 0.15 * Math.min(q, 25)); break; }
       case 'supply': { const k = d.k; const use = { food: S.people(), water: waterUse(), fodder: fodderUse() }[k]; let n = d.n ? +d.n : Math.ceil(use * +d.d); const p = ECON.supplyPrice(k, c.id); n = Math.min(n, Math.floor(S.coins / p), freeSupplySpace(k)); if (n <= 0) { H.showToast('Cannot buy', S.coins < p ? 'Not enough silver.' : 'No room left to carry it.', 'Supplies'); break; } S[k] += n; spend(n * p); break; }
       case 'sellsupply': { const k = d.k; const n = Math.min(10, Math.floor(S[k])); S[k] -= n; S.coins += n * ECON.supplyPrice(k, c.id) * .5; break; }
       case 'dump': S[d.k] = Math.max(0, S[d.k] - 10); break;
@@ -1466,7 +1466,7 @@
       steps: [
         { id: 'bailo', t: 'Present your letter at the Merchants\' Guild', hint: 'Find the stall marked "Merchants\' Guild" in Constantinople and press E.', done: () => S.camp.ev.bailo },
         { id: 'animal', t: 'Buy a pack animal', hint: 'The stable-master sells donkeys, mules and horses. Each one carries more goods, but eats.', done: () => S.packCount() + draftCount() >= 1 },
-        { id: 'markets', t: 'Trade in three markets you have not seen before', hint: 'East to Ankara and Sivas, along the Black Sea to Sinope and Trebizond, or the long road to Tabriz.', done: () => S.visited.length - S.camp.base >= 3, v: () => `${Math.min(3, S.visited.length - S.camp.base)} / 3` },
+        { id: 'markets', t: 'Sell goods in three different markets', hint: 'The map\'s Markets layer shows the eleven markets. Byzantium and Rûm is one; the Mamluk lands to the south, the Ilkhanate to the east and the Golden Horde across the Black Sea are others.', done: () => (S.camp.mk2 || []).length >= 3, v: () => `${Math.min(3, (S.camp.mk2 || []).length)} / 3` },
         { id: 'caravan', t: 'Build a caravan of three animals or a cart', hint: 'More animals carry more and earn more on every road.', done: () => S.packCount() >= 3 || draftCount() >= 1 },
         { id: 'worth', t: () => `Build your net worth to 1,500 ${CURRENCY}`, hint: 'Net worth counts silver, the goods you carry at local prices, and half the value of your animals.', done: () => netWorth() >= 1500, v: () => `${fmt(netWorth())} / 1,500` },
         { id: 'venture', opt: true, t: 'Optional: back a caravan venture or take a loan', hint: 'At any Merchants\' Guild. Ventures can multiply your stake, or lose it.', done: () => (S.inv || []).length > 0 || !!S.loan || S.camp.ev.venture },
@@ -2077,7 +2077,7 @@
     ov.classList.add('show');
   }
   { const st = document.createElement('style'); st.textContent = 'body:not(.journey) .mx-hud { display:none; }'; document.head.appendChild(st); }
-  window.__v19 = { S: () => S, arrive: id => H.onCity(W.cityById[id]), market: id => renderMarket(W.cityById[id]), contracts: id => cityContracts(W.cityById[id]), journal: t => { panelState.tab = t; return renderJournal(); }, openMerchant: () => { panelState.vendor = { name: 'Merchant', role: 'merchant' }; panelState.mtab = 'market'; openUI('vendor'); }, openJournal: t => { panelState.tab = t; openUI('journal'); }, act: (a, d) => act(a, d), goto: id => { H.placeAtCity(id); H.onCity(W.cityById[id]); } };
+  window.__v19 = { S: () => S, arrive: id => H.onCity(W.cityById[id]), market: id => renderMarket(W.cityById[id]), contracts: id => cityContracts(W.cityById[id]), journal: t => { panelState.tab = t; return renderJournal(); }, openMerchant: () => { panelState.vendor = { name: 'Merchant', role: 'merchant' }; panelState.mtab = 'market'; openUI('vendor'); }, openJournal: t => { panelState.tab = t; openUI('journal'); }, act: (a, d) => act(a, d), goto: id => { H.placeAtCity(id); H.onCity(W.cityById[id]); }, fodderUse: () => fodderUse(), load: () => load(), netWorth: () => netWorth() };
   window.__v18 = { lanes, openFreeHarbour: id => openFreeHarbour(W.cityById[id]), startVoyage: (i) => startVoyage(lanes()[i], nearestCityId()), voy: () => voy, wars, activeWars, warClosed, setSleep: v => { if (voy) voy.sleep = v; } };
 
   // ---------------- per-frame ----------------
