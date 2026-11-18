@@ -10,6 +10,7 @@ These files are the editable source for it:
 | `gen_markets_js.py` | Writes `src/markets_data.js` from the two files above. Goods carried over from v18 keep their old ids |
 | `gen_market_layer.py` | Bakes the map's Markets layer into `src/markets_layer.js` (needs numpy, scipy, Pillow) |
 | `sim.py` | Greedy-trader balance simulator comparing the v18 economy (`old_goods_v18.json`) with v19 |
+| `sim_acts.py` | Story-pace simulator: plays Acts I–III under each economy variant (`--v recommended --seeds 40 --detail`) |
 | `road_graph.json` | Road distances between cities (km), used by the simulator |
 
 After editing the data: `python3 tools/markets/gen_markets_js.py`, then `python3 tools/markets/gen_market_layer.py`
