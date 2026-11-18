@@ -4,7 +4,9 @@ A first-person browser game (Three.js, one self-contained page): travel the over
 
 **Playable build:** https://claude.ai/artifact/CAiFGNGi3FXAM4cpMtrbr3 (v18.3: v18 with Combat Practice)
 
-Design docs live in the claude.ai project "Silk Road Game": `silk-road-v1-design-notes.md` (world, cities, graphics), `silk-road-game-mechanics.md` (rules), `silk-road-campaign-plan.md`, `silk-road-goods-rarity.md`, `silk-road-arena.md` and `silk-road-combat-practice-build.md`.
+- **Design docs** live in the claude.ai project "Silk Road Game". Start with `silk-road-start-here.md`, which lists the current version, which doc covers what, the roadmap and open decisions.
+- **Backlog:** [GitHub issues](https://github.com/abealford/Silk-Road-Game/issues). Bugs, ideas, playtest requests and decisions go here, not in chat.
+- **History:** [CHANGELOG.md](CHANGELOG.md), one line per version.
 
 ## Build
 
