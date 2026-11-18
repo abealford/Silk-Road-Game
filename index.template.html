@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=EB+Garamond:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <!--#include style|css/main.css -->
-<!--#include style|css/fonts.css -->
+<!--#include style|css/fonts.css+css/combat.css -->
 </head>
 <body>
 <canvas id="c"></canvas>
@@ -32,7 +32,7 @@
     <div id="modes">
       <button class="modebtn" data-mode="journey"><b>The Journey</b><small>Matteo's story: from Acre to the court of Kublai Khan</small></button>
       <button class="modebtn alt" data-mode="free"><b>Free Roam</b><small>Explore freely, with fast travel from the map</small></button>
-      <button class="modebtn alt" data-mode="arena"><b>The Arena</b><small>Combat practice: time moves only when you move</small></button>
+      <button class="modebtn alt" data-mode="combat"><b>Combat Practice</b><small>Five waves in the arena, where time moves only when you move</small></button>
       <button class="modebtn cont" data-mode="continue"><b>Continue the Journey</b><small>Resume from your last city</small></button>
     </div>
   </div>
@@ -77,6 +77,15 @@
   <div id="legend"></div><div id="zoutnote">Zoomed all the way out</div>
   <div class="mhint">Drag to pan · scroll to zoom · click a city to travel<br><span style="font-size:12px;opacity:.8">Coastlines, lakes, rivers &amp; modern borders: Natural Earth · 1272 borders adapted from historical-basemaps (A. Ourednik), approximate</span></div>
 </div>
+<div id="cb-hud">
+  <div id="cb-slow"></div><div id="cb-hurt"></div>
+  <div id="cb-info"><b id="cb-w"></b><i id="cb-wn"></i><span id="cb-left"></span><div id="cb-hp"></div><div id="cb-wpn"></div></div>
+  <div id="cb-dot"></div>
+  <div id="cb-banner"></div>
+  <div id="cb-time">Time<div class="tr"><div id="cb-tbar"></div></div></div>
+  <div id="cb-keyline"><b>WASD</b> move · <b>Mouse</b> look · <b>Click</b> attack · <b>P</b> pause · stand still to slow time</div>
+</div>
+<div id="cb-ui"><div class="card" id="cb-card"></div></div>
 <div id="fade"></div>
 
 <!--#include script|vendor/three.min.js -->
@@ -89,6 +98,6 @@
 <!--#include script|src/icons.js -->
 <!--#include script|src/events.js -->
 <!--#include script|src/journey.js -->
-<!--#include script|src/arena.js -->
+<!--#include script|src/combat.js -->
 </body>
 </html>

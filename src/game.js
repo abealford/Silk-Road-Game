@@ -1524,7 +1524,6 @@
 
   // ---------- input ----------
   document.addEventListener('keydown', (e) => {
-    if (window.__arenaOn) return;
     if (!started) return;
     if (pauseOpen()) { if (e.code === 'KeyP' || e.code === 'Escape') closePause(); return; }
     if (HK.keydown && HK.keydown(e)) { e.preventDefault(); return; }
@@ -1932,7 +1931,7 @@
     hudTimer = 0; if (HK.start) HK.start(mode);
   }
   $('startbtn').onclick = () => startGame('free');
-  document.querySelectorAll('.modebtn').forEach(bt => bt.onclick = () => { if (bt.dataset.mode === 'arena') { if (window.Arena) window.Arena.start(); return; } if (bt.dataset.mode === 'journey' && window.openCharSel) window.openCharSel((cid, o) => { HK.charId = cid; HK.campOpts = o || {}; startGame('journey'); }); else startGame(bt.dataset.mode); });
+  document.querySelectorAll('.modebtn').forEach(bt => bt.onclick = () => { if (bt.dataset.mode === 'combat') { window.COMBAT.open(); return; } if (bt.dataset.mode === 'journey' && window.openCharSel) window.openCharSel((cid, o) => { HK.charId = cid; HK.campOpts = o || {}; startGame('journey'); }); else startGame(bt.dataset.mode); });
   $('pm-resume').onclick = closePause;
   $('pm-menu').onclick = () => { if (HK.save) HK.save(); location.reload(); };
   $('pm-save').onclick = () => { if (HK.save) HK.save(); $('pm-save').textContent = 'Saved ✓'; setTimeout(() => $('pm-save').textContent = 'Save the journey', 1500); };
@@ -2810,7 +2809,7 @@
   let detT = 0; let last = performance.now(), palT = 0, frames = 0, fpsT = 0;
   function loop() {
     requestAnimationFrame(loop);
-    if (window.__arenaOn) return;
+    if (window.__combatOn) { last = performance.now(); window.COMBAT.frame(last); return; }
     const now = performance.now(); let dt = Math.min(0.05, (now - last) / 1000); last = now;
     if (started && !mapOpen && !window.__freeze) updatePlayer(dt); else { camera.position.set(player.x, player.y, player.z); camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ'); }
     if (started) { updateHUD(dt); drawMinimap(dt); }
