@@ -128,6 +128,7 @@
       <div class="mx-row">${coinsHtml(S.coins)} ${CURRENCY} <span class="mx-rep" title="Reputation">★ ${Math.round(S.rep)}</span>${S.paiza ? '<span class="mx-paiza" title="Silver paiza">PAIZA</span>' : ''}${facBadge()}</div>
       <div class="mx-row">Cargo <b>${fmt1(load())}</b> / ${capacity()} loads${load() > capacity() ? ' <span class="bad">overloaded</span>' : ''}</div>
       <div class="mx-row">${bar('Food', S.food, fd, 8)} ${unl('water') ? bar('Water', S.water, wa, 6) : ''} ${fodderUse() > 0 ? bar('Fodder', S.fodder, fo, 8) : ''}</div>${c ? '' : tripHtml()}
+      ${c && followers.length ? `<div class="mx-row mx-dim">Your caravan waits at the caravanserai by the gate.</div>` : ''}
       <div class="mx-row mx-dim">Speed ${mi(speedKm())} mi/day · strength ${strength()} · ${S.people()} ${S.people() > 1 ? 'people' : 'person'}${animalCount() ? ', ' + animalCount() + ' animals' : ''}</div>
       ${(S.contracts || []).length ? `<div class="mx-row">Contracts: ${S.contracts.map(k => `${lcName(GOOD[k.g].name)} → ${W.cityById[k.to].name.replace(/ \(.*\)/, '')} <i class="mx-dim">(${Math.max(0, Math.ceil(k.due - S.day))}d)</i>`).join(', ')}</div>` : ''}
       <div class="mx-row mx-keys"><b>E</b> interact · <b>J</b> journal · <b>C</b> caravan${c ? ' · <b>R</b> restock' : ''} · <b>T</b> speed · <b>P</b> pause</div>`;
@@ -170,6 +171,7 @@
     S.food -= S.people() * days * seasonMul('food', t); S.fodder -= fodderUse() * days * seasonMul('fodder', t);
     if (t && t.arid) S.water -= waterUse() * days * t.arid * seasonMul('water', t);
     if (S.food < 0) S.food = 0; if (S.fodder < 0) S.fodder = 0; if (S.water < 0) S.water = 0;
+    if (H.adm && H.adm.infSupplies) { S.food = Math.max(S.food, S.people() * 10); S.water = Math.max(S.water, waterUse() * 10); S.fodder = Math.max(S.fodder, fodderUse() * 10); } // v20 admin
     const whole = Math.floor(S.day) - before;
     for (let d = 0; d < whole; d++) dailyTick(t);
   }
@@ -682,6 +684,7 @@
     return W.settleAt(p.x, p.z) < 0.35;
   }
   function maybeEvent() {
+    if (H.adm && H.adm.noEvents) return; // v20 admin
     if (ui || S.cool > 0) return; if (H.getCity()) return;
     if (rnd() > 0.22) return;
     const X = eventContext();
@@ -933,9 +936,12 @@
     return 0;
   }
   function trailAt(s) { for (let i = 1; i < trail.length; i++) { if (trail[i].s >= s) { const a = trail[i - 1], b = trail[i]; const t = (s - a.s) / ((b.s - a.s) || 1); return [a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, Math.atan2(a.x - b.x, a.z - b.z)]; } } const l = trail[trail.length - 1]; return [l.x, l.z, 0]; }
+  // v20: inside a city's walls the caravan waits at the caravanserai, so each follower vanishes at the gate and walks out again behind you
+  function insideWalls(x, z) { const nc = W.nearestCity(x, z); return nc.d < nc.c.R + 1; }
   function placeFollowers(moved) {
     for (const f of followers) {
       const [x, z, yaw] = trailAt(f.dist); const o = f.obj; o.position.set(x, W.walkHeight(x, z) - .02, z);
+      o.visible = !insideWalls(x, z);
       let dy = yaw - o.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); o.rotation.y += dy * .2;
       animate(o, moved > 0 ? 2 : 0, 1 / 60);
       if (o.userData.cart) animate(o.children[1], moved > 0 ? 2 : 0, 1 / 60);
@@ -1430,6 +1436,7 @@
     return st;
   }
   function saveChapter() {
+    if (S && S.adminUsed) return; // v20: games touched by admin mode never overwrite the chapter saves
     try { const all = JSON.parse(localStorage.getItem(CAMP_KEY) || '{}'); const mine = all.venetian = all.venetian || {}; const keep = S.camp.fresh; delete S.camp.fresh;
       mine[S.camp.act] = JSON.stringify(S); if (keep) S.camp.fresh = keep; localStorage.setItem(CAMP_KEY, JSON.stringify(all)); } catch (e) { }
   }
@@ -2079,6 +2086,55 @@
   { const st = document.createElement('style'); st.textContent = 'body:not(.journey) .mx-hud { display:none; }'; document.head.appendChild(st); }
   window.__v19 = { S: () => S, arrive: id => H.onCity(W.cityById[id]), market: id => renderMarket(W.cityById[id]), contracts: id => cityContracts(W.cityById[id]), journal: t => { panelState.tab = t; return renderJournal(); }, openMerchant: () => { panelState.vendor = { name: 'Merchant', role: 'merchant' }; panelState.mtab = 'market'; openUI('vendor'); }, openJournal: t => { panelState.tab = t; openUI('journal'); }, act: (a, d) => act(a, d), goto: id => { H.placeAtCity(id); H.onCity(W.cityById[id]); }, fodderUse: () => fodderUse(), load: () => load(), netWorth: () => netWorth() };
   window.__v18 = { lanes, openFreeHarbour: id => openFreeHarbour(W.cityById[id]), startVoyage: (i) => startVoyage(lanes()[i], nearestCityId()), voy: () => voy, wars, activeWars, warClosed, setSleep: v => { if (voy) voy.sleep = v; } };
+
+  // ============================================================
+  //  v20: QUALITY UPDATE: harbour master, quest pins, admin and view hooks
+  // ============================================================
+  // the harbour master stands under a tall mast with a blue pennant and an anchor board, and shows on the minimap
+  { const o = spawnVendors; spawnVendors = function (c) { const had = vendorSets.has(c.id); o(c); if (had) return; const vs = vendorSets.get(c.id); if (!vs) return;
+    for (const v of vs.vendors) { if (v.role !== 'harbour') continue; const lx = v.x - c.x, lz = v.z - c.z, a = Math.atan2(lz, lx);
+      const b = new B.Builder(); b.ao = false; const mx = Math.cos(a) * (Math.hypot(lx, lz) + 3.4) + Math.sin(a) * 1.6, mz = Math.sin(a) * (Math.hypot(lx, lz) + 3.4) - Math.cos(a) * 1.6;
+      b.cyl(mx, 0, mz, .11, .15, 9.5, 0x5a3a24, 6); b.box(mx, 7.6, mz, 2.6, .1, .1, 0x5a3a24); // mast and yard
+      b.box(mx + .05, 8.3, mz, .04, 1.1, 2.6, 0x2a5a8a, a); b.box(mx + .05, 8.55, mz, .045, .35, 2.62, 0xf3e7cc, a); // pennant
+      b.box(mx, 2.2, mz, 1.2, 1.3, .08, 0xf3e7cc, -a + Math.PI / 2); // board
+      const ag = new THREE.Mesh(b.geometry(), H.objMat); ag.castShadow = true; vs.group.add(ag);
+      const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d'); g.fillStyle = '#2a5a8a'; g.font = 'bold 104px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('⚓', 64, 70);
+      const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, depthWrite: false })); sp.scale.set(1.5, 1.5, 1); sp.position.set(mx, 10.4, mz); vs.group.add(sp);
+      v.label.scale.set(2.3, .57, 1); v.label.position.y = 3.4; v.mast = { x: c.x + mx, z: c.z + mz }; } }; }
+  { const o = H.onCity; H.onCity = function (c) { o(c);
+    if (MODE === 'journey' && S && c && unl('ships') && PORTS.has(c.id) && !(S.harbourSeen = S.harbourSeen || {})[c.id]) { S.harbourSeen[c.id] = 1;
+      setTimeout(() => { if (!ui) H.showToast('A port', `Ships sail from ${nm(c.id)}. The harbour master stands in the square under a tall mast with a blue pennant, marked ⚓ on the minimap.`, 'Harbour'); }, 7500); } }; }
+  { const o = H.minimapDots; H.minimapDots = function () { const out = o ? o() : []; const c = H.getCity(); const vs = c && vendorSets.get(c.id); if (vs) for (const v of vs.vendors) if (v.role === 'harbour') out.push({ x: v.x, z: v.z, c: '#2a5a8a', big: true }); return out; }; }
+
+  // where each story objective is done, for the map's quest pins
+  const STEP_CITY = { talk: 'acre', contract: 'acre', buy: 'acre', damascus: 'damascus', deliver: 'aleppo', arrive: 'constantinople', bailo: 'constantinople', khan: 'khanbaliq', outbid: 'caffa', furs: 'tana',
+    consul: () => S.camp.side === 'genoa' ? 'caffa' : 'tabriz', letters: () => S.camp.a4 && S.camp.a4.lettersTo, join: () => nearestOf(FACTIONS.venice.cities), gjoin: () => nearestOf(FACTIONS.genoa.cities),
+    gfactor: () => nearestOf(FACTIONS.genoa.cities), gmaster: () => nearestOf(FACTIONS.genoa.cities), factor: () => nearestOf(FACTIONS.venice.cities), master: () => nearestOf(FACTIONS.venice.cities) };
+  function nearestOf(ids) { const d = distFrom(nearestCityId()); let b = null; for (const id of ids) if (W.cityById[id] && (b === null || (d[id] ?? 1e9) < (d[b] ?? 1e9))) b = id; return b; }
+  function questPins() {
+    if (MODE !== 'journey' || !S) return []; const out = [];
+    if (S.camp && S.camp.act <= 4) { const steps = stepsOf(S.camp.act); let first = true;
+      for (const st of steps) { if (st.opt || stepDone(st)) continue; const m = STEP_CITY[st.id]; const city = typeof m === 'function' ? m() : m;
+        if (city && W.cityById[city]) { const same = out.find(q => q.story && q.city === city); if (same) same.text += `; ${txt(st.t)}`; else out.push({ city, color: '#b8860b', icon: '★', text: `<b>Act ${ROMAN[S.camp.act]}:</b> ${txt(st.t)}`, story: true, cur: first }); } first = false; } }
+    for (const k of (S.contracts || [])) { const left = Math.max(0, Math.ceil(k.due - S.day)); out.push({ city: k.to, color: left <= 5 ? '#d0451b' : '#7a1f12', icon: String(left), text: `<b>Contract:</b> ${k.n} ${GOOD[k.g].unit}${k.n > 1 ? 's' : ''} of ${lcName(GOOD[k.g].name)} for ${k.client || 'a client'}, due in ${left} day${left === 1 ? '' : 's'}` }); }
+    for (const e of (S.errands || [])) { if (!W.cityById[e.to] || e.done) continue; const left = Math.max(0, Math.ceil(e.due - S.day)); if (left <= 0) continue;
+      out.push({ city: e.to, color: '#2a5a8a', icon: e.type === 'book' ? 'B' : 'G', text: e.type === 'book' ? `<b>Errand:</b> deliver the scholar's manuscript (pays ${fmt(e.pay)}, ${left} days left)` : `<b>Commission:</b> bring ${e.n} ${GOOD[e.g] ? lcName(GOOD[e.g].name) : e.g} to the governor (pays ${fmt(e.pay)}, ${left} days left)` }); }
+    return out.filter(q => W.cityById[q.city]);
+  }
+  H.questPins = questPins;
+  H.compassMarks = () => { const c = H.getCity(); const vs = c && vendorSets.get(c.id); const out = []; if (vs) for (const v of vs.vendors) if (v.role === 'harbour' && Math.hypot(v.x - H.player.x, v.z - H.player.z) > 5) out.push({ x: v.x, z: v.z, c: '#2a5a8a', t: '⚓' }); return out; };
+  { const o = H.mapCityInfo; H.mapCityInfo = c => { const q = questPins().filter(q => q.city === c.id); return (q.length ? `<div class="mx-qpins">${q.map(q => `<div><span style="color:${q.color}">⚑</span> ${q.text}</div>`).join('')}</div>` : '') + (o ? o(c) : ''); }; }
+  // the model kit, for the third-person view
+  Object.assign(H.lifeKit, { makePerson: (...a) => { W = W || H.W; B = B || H.B; return makePerson(...a); }, makeAnimal: (...a) => { W = W || H.W; B = B || H.B; return makeAnimal(...a); }, animate });
+  H.canJump = () => !voy && !ui;
+  // what the admin tools reach inside the journey
+  H.J = { get S() { return S; }, get MODE() { return MODE; }, get ui() { return ui; }, get voy() { return voy; }, M, EVENTS,
+    act: (a, d) => act(a, d), passDays: n => passDays(n, terrainAt(H.player.x, H.player.z)), triggerEvent: id => { const ev = EVENTS.find(e => e.id === id); if (ev) triggerEvent(ev, eventContext()); }, eventContext: () => eventContext(),
+    rebuildCaravan: () => rebuildCaravan(), applyMount: () => applyMount(), hud: () => updateHud(true), save: () => save(), saveChapter: () => saveChapter(), refreshVendors: () => refreshVendors(),
+    ACTS, ACT_NAMES, stepsOf: n => stepsOf(n), stepDone: st => stepDone(st), campCheck: () => campCheck(), advance: () => advance(), showStory: (n, p, a) => showStory(n, p, a), updateTracker: () => updateTracker(true), goalChecks: () => goalChecks(),
+    netWorth: () => netWorth(), capacity: () => capacity(), load: () => load(), speedKm: () => speedKm(), distFrom: id => distFrom(id), nearestCityId: () => nearestCityId(), dateOf, fmt, nm, unl: k => unl(k),
+    wars: () => wars(), activeWars: () => activeWars(), warDef: id => warDef(id), spawnMarketEvent: q => spawnMarketEvent(q), RARE, PORTS, closeUI: () => closeUI(), openUI: n => openUI(n), resetTrail: () => resetTrail(),
+    restart: () => restart(), seasonNow: () => seasonNow(), facState: () => FS(), chapters: () => { try { return (JSON.parse(localStorage.getItem(CAMP_KEY) || '{}').venetian) || {}; } catch (e) { return {}; } }, CAMP_KEY, SAVE_KEY };
 
   // ---------------- per-frame ----------------
   let slowT = 0;

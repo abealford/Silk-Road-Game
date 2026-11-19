@@ -112,6 +112,7 @@
   #legend i.o { background:#f7efdc; } #legend i.f { background:#3d2a18; }
   .mbtns { position:absolute; right:20px; top:18px; display:flex; gap:8px; }
   .mbtns .layer.on { background:#3d2a18; color:#f6eacd; }
+  .mbtns #mquests { margin-left:6px; } .mbtns #mquests.on { background:#7a1f12; color:#f6eacd; border-color:#7a1f12; } .mbtns #mquests:before { content:'⚑ '; }
   .mbtns button, #mapcard button { font-family:"Cinzel"; font-size:14px; background:rgba(246,234,206,.95); border:1px solid #a67c43; padding:7px 12px; cursor:pointer; border-radius:2px; color:var(--ink); }
   #mapcard { position:absolute; right:20px; top:70px; width:330px; background:rgba(246,234,206,.96); border:1px solid #a67c43; padding:16px 18px; display:none; box-shadow:0 10px 30px rgba(0,0,0,.3); }
   #mapcard.show { display:block; }

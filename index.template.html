@@ -26,6 +26,7 @@
       <b>1 – 9</b><span>Choose your next road at a city crossroads</span>
       <b>F</b><span>Follow the road to the next city</span>
       <b>M</b><span>Open the map (free roam: travel to any city)</span>
+      <b>V · Space</b><span>Third-person view on the road · jump</span>
       <b>E · J · C</b><span>Journey mode: talk to traders, journal, caravan</span>
     </div>
     <button id="startbtn">Begin the Journey</button>
@@ -48,7 +49,7 @@
   <div id="toast"><div id="t-sub"></div><div id="t-name"></div><div id="t-blurb"></div></div>
   <canvas id="minimap"></canvas>
   <div id="cross"></div>
-  <div id="hint"><b>WASD</b> walk · <span class="fr"><b>Shift</b> hurry · </span><b>F</b> follow road · <b>M</b> map · <b>N</b> minimap · <b>T</b> speed · <b>L</b> time of day · <span class="fr"><b>Y</b> season · </span><b>P</b> pause</div>
+  <div id="hint"><b>WASD</b> walk · <span class="fr"><b>Shift</b> hurry · </span><b>F</b> follow road · <b>M</b> map · <b>N</b> minimap · <b>T</b> speed · <b>L</b> time of day · <b>V</b> view · <b>Space</b> jump · <span class="fr"><b>Y</b> season · </span><b>P</b> pause</div>
   <div id="help"><div class="controls">
       <b>W A S D</b><span>Walk · Arrow keys also work</span>
       <b>Shift</b><span>Hurry</span>
@@ -56,6 +57,8 @@
       <b>1 – 9</b><span>Choose a road at a crossroads</span>
       <b>F</b><span>Follow the road to the next city</span>
       <b>M</b><span>Map · click a city to travel there</span>
+      <b>Space</b><span>Jump</span>
+      <b>V</b><span>First or third person (on the road)</span>
   </div></div>
 </div>
 <div id="pause"><div class="pm">
@@ -102,5 +105,8 @@
 <!--#include script|src/events.js -->
 <!--#include script|src/journey.js -->
 <!--#include script|src/combat.js -->
+<!--#include script|src/views.js -->
+<!--#include script|src/admin.js -->
+<!--#include script|src/lookup.js -->
 </body>
 </html>
