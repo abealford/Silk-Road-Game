@@ -535,12 +535,12 @@ const SUPPLY_W = { food: 0.05, water: 0.1, fodder: 0.05 };
 //  v17: FACTIONS — merchant houses with their own standing, ranks and goods
 // ============================================================
 const FACTIONS = {
-  venice: { name: 'Venetian guild', short: 'Venetian', house: 'Venetian house', who: 'Latin Christians', faiths: ['christian'], latin: true, rival: 'genoa', color: '#b8862a',
-    cities: ['constantinople', 'acre', 'trebizond', 'tana', 'tabriz'], goods: ['muranoglass', 'scarlet'], head: 'the bailo', client: 'the Venetian house',
-    blurb: 'The merchants of the Most Serene Republic, organised by the bailo in Constantinople and the consuls in Acre, Trebizond, Tana and Tabriz. Back in the city since 1268, they are fighting the Genoese for every market.' },
-  genoa: { name: 'Genoese merchants', short: 'Genoese', house: 'Genoese house', who: 'Latin Christians', faiths: ['christian'], latin: true, rival: 'venice', color: '#a8201a',
-    cities: ['constantinople', 'caffa', 'ayas', 'tana'], goods: ['alum', 'mastic'], head: 'the podestà', client: 'the Genoese house',
-    blurb: 'Allies of the Emperor since 1261, the Genoese hold Pera across the Golden Horn and have just founded Caffa in the Crimea. They mean to own the Black Sea.' },
+  venice: { name: 'Scuola di San Marco', short: 'Venetian', house: 'Scuola di San Marco', who: 'Latin Christians', faiths: ['christian'], latin: true, rival: 'genoa', color: '#b8862a',
+    cities: ['constantinople', 'acre', 'trebizond', 'tana', 'tabriz'], goods: ['muranoglass', 'scarlet'], head: 'the bailo', client: 'the Scuola di San Marco',
+    blurb: 'On paper a brotherhood of Saint Mark that prays together, buries its dead and looks after the widows; in truth, how Venice trades in the East. Its houses answer to the bailo in Constantinople and the consuls in Acre, Trebizond, Tana and Tabriz.' },
+  genoa: { name: 'Compagna', short: 'Genoese', house: 'house of the Compagna', who: 'Latin Christians', faiths: ['christian'], latin: true, rival: 'venice', color: '#a8201a',
+    cities: ['constantinople', 'caffa', 'ayas', 'tana'], goods: ['alum', 'mastic'], head: 'the podestà', client: 'the Compagna',
+    blurb: 'The sworn association of Genoa\'s merchants. Allies of the Emperor since 1261, they hold Pera across the Golden Horn and have just founded Caffa in the Crimea. They mean to own the Black Sea.' },
   karimi: { name: 'Kārimī merchants', short: 'Kārimī', house: 'Kārimī counting house', who: 'Muslim merchants', faiths: ['muslim'], rival: null, color: '#3a6a3a',
     cities: ['cairo', 'alexandria', 'qus', 'aden'], goods: [], head: 'the ra\'is of the Kārimī', client: 'a Kārimī house', spices: true,
     blurb: 'The great spice guild of Egypt and Yemen. Pepper, cinnamon, cloves and incense pass through their hands from Aden to Alexandria, and outsiders pay for the privilege.' },
@@ -549,17 +549,17 @@ const FAC_ORDER = ['venice', 'genoa', 'karimi'];
 const FAC_RANKS = [[0, 'Stranger'], [10, 'Associate'], [25, 'Member'], [50, 'Factor'], [80, 'Master']];
 const FAC_SPICES = ['pepper', 'cinnamon', 'spices', 'incense', 'sugar'];
 // monopoly goods: only the faction's members can buy them, at its houses
-GOOD.muranoglass = { id: 'muranoglass', name: 'Murano glass', unit: 'case', size: 'medium', w: 0.25, base: 28, slope: .34, cap: 1.9, prod: ['constantinople', 'acre', 'trebizond', 'tana'], fac: 'venice',
-  blurb: 'Goblets, beads and enamelled lamps from the furnaces of Venice. Only members of the Venetian guild may buy them for export.' };
+GOOD.muranoglass = { id: 'muranoglass', name: 'Venetian glass', unit: 'case', size: 'medium', w: 0.25, base: 28, slope: .34, cap: 1.9, prod: ['constantinople', 'acre', 'trebizond', 'tana'], fac: 'venice',
+  blurb: 'Goblets, beads and enamelled lamps from the furnaces of Venice. Only brothers of the Scuola di San Marco may buy them for export.' };
 GOOD.scarlet = { id: 'scarlet', name: 'Scarlet broadcloth', unit: 'bolt', size: 'medium', w: 0.25, base: 34, slope: .32, cap: 1.9, prod: ['constantinople', 'acre', 'trebizond', 'tana'], fac: 'venice',
-  blurb: 'Fine wool dyed with kermes in Venice: the cloth of kings and khans. Sold only through the Venetian guild.' };
+  blurb: 'Fine wool dyed with kermes in Venice: the cloth of kings and khans. Sold only through the Scuola di San Marco.' };
 GOOD.alum = { id: 'alum', name: 'Phocaean alum', unit: 'sack', size: 'bulky', w: 1, base: 18, slope: .55, cap: 2.1, prod: ['constantinople', 'caffa', 'ayas'], fac: 'genoa',
   blurb: 'The mordant that fixes dyes to cloth, from the mines near Phocaea. Every dyer from Tabriz to India needs it, and the Genoese hold the trade.' };
 GOOD.mastic = { id: 'mastic', name: 'Chian mastic', unit: 'jar', size: 'medium', w: 0.25, base: 24, slope: .34, cap: 1.9, prod: ['constantinople', 'caffa', 'ayas'], fac: 'genoa',
   blurb: 'Resin tears from the mastic trees of Chios, chewed, burned and used in medicine. Shipped by the Genoese.' };
 const FAC_GOODS = ['muranoglass', 'scarlet', 'alum', 'mastic'];
 // v17: quest letters for the guild's first mission
-GOOD.guildletters = { id: 'guildletters', name: 'The guild\'s letters', unit: 'packet', w: 0.05, base: 0, special: true, quest: true, dest: 'To deliver to another Venetian house',
+GOOD.guildletters = { id: 'guildletters', name: 'The Scuola\'s letters', unit: 'packet', w: 0.05, base: 0, special: true, quest: true, dest: 'To deliver to another house of the Scuola',
   blurb: 'Sealed reports and bills of exchange for the Venetian consuls.' };
 
 function facState(s) { if (!s.fac) s.fac = { venice: { s: s.char === 'venetian' ? 5 : 0, m: false }, genoa: { s: 0, m: false }, karimi: { s: 0, m: false } }; return s.fac; }

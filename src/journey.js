@@ -34,6 +34,7 @@
   function migrate(s) {
     if (!s.seed) s.seed = 1 + Math.floor(Math.random() * 2e9); ECON.seed = s.seed; // v14: every new game rolls its own contracts, ventures, opportunities and price swings
     s.speed = s.speed || {}; if (!s.char) { s.char = 'venetian'; s.faith = 'christian'; }
+    if (s.camp && !s.camp.v21) { s.camp = null; s.oldStory = true; } // v21: Matteo's old acts are gone; such a save carries on as an open journey
     if (s.mount && s.mount !== 'foot') { s.pack.horse = (s.pack.horse || 0) + 1; s.mount = 'foot'; }
     s.v = 2; return s;
   }
@@ -266,7 +267,7 @@
   // ---------------- vendors ----------------
   const NAMES = {
     byz: ['Theodore', 'Michael', 'Nikephoros', 'Ioannes', 'Alexios', 'Demetrios'], armenian: ['Hovhannes', 'Smbat', 'Grigor', 'Vahram'], georgian: ['Giorgi', 'Davit', 'Shota', 'Zakaria'],
-    rum: ['Hasan', 'Mahmud', 'Osman', 'Yusuf', 'Ali'], arab: ['Abu Bakr', 'Khalil', 'Ibrahim', 'Salah', 'Umar'], persian: ['Rashid', 'Bahram', 'Farrukh', 'Jalal', 'Kamal'],
+    rum: ['Hasan', 'Mahmud', 'Osman', 'Yusuf', 'Ali'], arab: ['Abu Bakr', 'Khalil', 'Ibrahim', 'Salah', 'Umar'], persian: ['Rashid', 'Hamid', 'Farrukh', 'Jalal', 'Kamal'],
     central: ['Nasir', 'Timur', 'Mas\'ud', 'Bahadur', 'Qutb'], tarim: ['Arslan', 'Bilge', 'Qutlugh', 'Tughril'], mongol: ['Temür', 'Bayan', 'Arghun', 'Nogai', 'Sübe'],
     chinese: ['Wang', 'Zhang', 'Liu', 'Chen', 'Zhao', 'Li'], song: ['Wu', 'Shen', 'Lu', 'Fang', 'Gu'], tibet: ['Tashi', 'Dorje', 'Pema', 'Sonam', 'Norbu'],
     yemen: ['Ahmad', 'Salim', 'Hasan al-Hadrami', 'Ali', 'Muhsin'], indian: ['Jagadu', 'Vastupala', 'Somadeva', 'Haridasa', 'Ramadeva', 'Bhima'], sea: ['Nga Pyi', 'Aung', 'Pho Khun', 'Chandra', 'Kyaw', 'Sri Ratna'],
@@ -289,7 +290,7 @@
         if (!best || sc > best.sc) best = { x, z, a, r, sc };
       }
       if (!best) continue; used.push([best.x, best.z]);
-      const person = makePerson(c.culture, role === 'merchant' || role === 'guild' || role.startsWith('quarter') ? 'rich' : role === 'outfitter' ? 'groom' : 'plain');
+      const person = makePerson(role === 'scuola' ? 'byz' : c.culture, role === 'merchant' || role === 'guild' || role.startsWith('quarter') ? 'rich' : role === 'outfitter' ? 'groom' : 'plain');
       person.position.set(best.x, 0, best.z); person.rotation.y = Math.atan2(-best.x, -best.z); g.add(person);
       const sb = new B.Builder(); sb.push(Math.cos(best.a) * (best.r + 1.9), 0, Math.sin(best.a) * (best.r + 1.9), Math.atan2(-best.x, -best.z)); B.FURN.stall(sb, Math.random, c.culture); if (role === 'outfitter') { sb.push(2.6, 0, -.5, 0); B.FURN.hay(sb, Math.random); sb.pop(); } if (role === 'merchant') { sb.push(-2.4, 0, .2, 0); B.FURN.sacks(sb, Math.random); sb.pop(); sb.push(2.4, 0, .2, 0); B.FURN.jars(sb, Math.random); sb.pop(); } sb.pop();
       const sm = new THREE.Mesh(sb.geometry(), H.objMat); sm.castShadow = true; g.add(sm);
@@ -916,6 +917,7 @@
       else { obj = makeAnimal('donkey', false, 2); obj.scale.setScalar(.55); obj.children[0].material = H.objMat; gap = 2; }
       H.scene.add(obj); followers.push({ obj, dist: dist + gap * .5 }); dist += gap;
     }
+    if (S.hero && window.HERO && followers.length) { const bn = HERO.makeBanner(S.hero, 1.6); const f0 = followers[0].obj; bn.position.set(.35, f0.userData.kind === 'animal' ? (AN.donkey.leg + .9) : 1.0, -.2); f0.add(bn); }
     resetTrail(); placeFollowers(0);
   }
   function resetTrail() {
@@ -1103,15 +1105,17 @@
   function restart() {
     try { localStorage.removeItem(SAVE_KEY); } catch (e) { }
     if (ui) { ui = null; ov.classList.remove('show'); }
-    S = decorate(migrate(campInitState(S && S.char, S && S.camp ? { mode: 'story' } : {}))); H.visited.clear(); H.visited.add(S.lastCity);
+    S = decorate(migrate(campInitState(S && S.char, S && S.camp ? { mode: 'story', hero: S.hero } : { hero: S && S.hero }))); H.visited.clear(); H.visited.add(S.lastCity); if (H.storyReset) H.storyReset();
     H.placeAtCity(S.lastCity); H.clearSelected(); applyMount(); rebuildCaravan(); updateHud(true); showIntro();
   }
   function showIntro() {
     ui = 'intro'; if (document.pointerLockElement) document.exitPointerLock(); H.setPauseWanted(false);
-    panel.className = 'mx-panel'; const C = charOf(S); const city = W.cityById[C.start];
+    panel.className = 'mx-panel'; const C = charOf(S); const city = W.cityById[S.lastCity] || W.cityById[C.start];
+    if (S.oldStory) { delete S.oldStory; }
     const kit = [`${fmt(S.coins)} ${CURRENCY}`].concat(Object.entries(S.pack).map(([k, n]) => `${n} ${lcName(PACK[k].name)}${n > 1 ? 's' : ''}`), Object.entries(S.hires).map(([k, n]) => `${n} ${lcName(HIRES[k].name)}`), S.paiza ? ['a silver paiza'] : [], S.cargo.letter ? ['the Sultan\'s sealed letter'] : []).join(', ');
-    panel.innerHTML = `<div class="mx-win mx-intro"><div class="mx-introhead">${portraitSVG(S.char, 110)}<div><div class="mx-eyebrow">${city.name} · June 1272</div><div class="mx-wt">${C.name}</div><div class="mx-dim"><i>${C.title}</i></div></div></div><div class="mx-orn"></div>
-      <p>${C.story}</p>
+    const hero = S.hero && window.HERO; const story = hero ? `A young Venetian merchant, about twenty, on your own account at last. You start in the Venetian quarter of Constantinople, with every road, stable, guild and harbour open to you. There is no story in the open journey: set your own course, or try for an audience with the Great Khan.` : C.story;
+    panel.innerHTML = `<div class="mx-win mx-intro"><div class="mx-introhead">${hero ? HERO.portrait(S.hero, 110) : portraitSVG(S.char, 110)}<div><div class="mx-eyebrow">${city.name} · June 1272</div><div class="mx-wt">${hero ? S.hero.first + ' ' + S.hero.last : C.name}</div><div class="mx-dim"><i>${hero ? 'A Venetian merchant' : C.title}</i></div></div>${hero ? `<div style="margin-left:auto">${HERO.sealSVG(S.hero, 64)}</div>` : ''}</div><div class="mx-orn"></div>
+      <p>${story}</p>
       <p><b>Your goal: ${C.goal.short}.</b> ${C.goal.text}${C.goal.type === 'deadline' ? ` <b>Deadline: day ${engineerDeadline()} (${dateOf(engineerDeadline())}).</b>` : ''}</p>
       <p><b>${C.ability.name}:</b> ${C.ability.text}</p>
       <p class="mx-dim">You set out with ${kit}.</p>
@@ -1413,81 +1417,107 @@
   //  v16: THE STORY (campaign). Acts unlock the game a piece at a time;
   //  each act has objectives, a story card, and a chapter save.
   // ============================================================
-  const CAMP_KEY = 'silkroad_chapters_v1';
+  const CAMP_KEY = 'silkroad_chapters_v2'; // v21: chapters of the new story (v1 held Matteo's acts)
   GOOD.bailoletter = { id: 'bailoletter', name: 'Letter to the bailo', unit: 'letter', w: 0.05, base: 0, special: true, quest: true, dest: 'To present at the Merchants\' Guild of Constantinople',
     blurb: 'Your late master\'s letter, sealed with the lion of Saint Mark, recommending you to the bailo of the Venetian quarter in Constantinople.' };
-  // features each act opens up (anything not listed is always on)
-  const FEATURES = { stables: 2, guild: 2, water: 2, news: 3, factions: 4 };
-  const ACT_NAMES = { 1: 'To the Queen of Cities', 2: 'The Venetian Quarter', 3: 'To the Great Khan', 4: 'A Seat in the Guild' };
+  GOOD.matteoring = { id: 'matteoring', name: 'Matteo\'s ring', unit: 'ring', w: 0, base: 0, special: true, quest: true, dest: 'Any brother of the Scuola di San Marco will know it',
+    blurb: 'Ser Matteo Corner\'s seal ring, cut with the winged lion of Saint Mark. He pressed it into your hand on the Aleppo road.' };
+  GOOD.griffinletter = { id: 'griffinletter', name: 'Letter with a griffin seal', unit: 'letter', w: 0, base: 0, special: true, quest: true, dest: 'Found on the riders. Read it in your journal',
+    blurb: '"Corner and all he carries to the Tyrian. No one else is to walk away from that road. — L. Z."' };
+  // features each chapter opens up (anything not listed is always on); 5 = after the story
+  const FEATURES = { stables: 2, guild: 2, water: 2, scuola: 2, news: 3, factions: 5 };
+  const ACT_NAMES = { 1: 'The Apprentice', 2: 'The Ring', 3: 'The Broker', 4: 'The Ransom' };
   window.CAMP_ACT_NAMES = ACT_NAMES;
-  const ROMAN = ['', 'I', 'II', 'III', 'IV'];
+  const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
   function unl(k) { if (!S || !S.camp) return true; return S.camp.act >= (FEATURES[k] || 0); }
   function vendorRoles() { return ['merchant'].concat(unl('stables') ? ['outfitter'] : [], unl('guild') ? ['guild'] : []); }
   const ev = k => { if (S && S.camp && !S.camp.ev[k]) { S.camp.ev[k] = 1; campCheck(); } };
   const nm = id => W.cityById[id].name.replace(/ \(.*\)/, '');
+  const heroName = () => S && S.hero ? `${S.hero.first} ${S.hero.last}` : 'Matteo Corner';
 
   // ---------------- new games and chapter saves ----------------
   function campInitState(cid, o) {
-    if (!o || o.mode !== 'story') return newState(cid);
-    if (o.chapter) { try { const all = JSON.parse(localStorage.getItem(CAMP_KEY) || '{}'); const j = all.venetian && all.venetian[o.chapter]; if (j) { const s = JSON.parse(j); s.camp.fresh = true; return s; } } catch (e) { } }
+    if (!o || o.mode !== 'story') { const st = newState(cid); if (o && o.hero) st.hero = o.hero; return st; }
+    if (o.chapter) { try { const all = JSON.parse(localStorage.getItem(CAMP_KEY) || '{}'); const j = all[o.chapter]; if (j) { const s = JSON.parse(j); s.camp.fresh = true; return s; } } catch (e) { } }
     const st = newState('venetian');
-    Object.assign(st, { coins: 100, food: 20, water: 0, fodder: 0, rep: 5, cargo: { bailoletter: 1 }, lastCity: 'acre', visited: ['acre'], lastRealm: ECON.realmOf('acre') });
-    st.camp = { act: 1, ev: {}, done: {}, startDay: 0, base: 1, fresh: true };
+    // your own purse is small: the goods you carry are Matteo's, his to sell and yours to learn on
+    Object.assign(st, { coins: 15, food: 12, water: 0, fodder: 0, rep: 5, cargo: { muranoglass: 2, scarlet: 1 }, lastCity: 'acre', visited: ['acre'], lastRealm: ECON.realmOf('acre') });
+    st.hero = o.hero || (window.HERO ? HERO.randomLook() : { first: 'Marco', last: 'Dandolo', gender: 'm' });
+    st.camp = { v21: true, act: 1, ev: {}, done: {}, startDay: 0, base: 1, fresh: true, hints: {}, arrows: 10 };
     return st;
   }
   function saveChapter() {
     if (S && S.adminUsed) return; // v20: games touched by admin mode never overwrite the chapter saves
-    try { const all = JSON.parse(localStorage.getItem(CAMP_KEY) || '{}'); const mine = all.venetian = all.venetian || {}; const keep = S.camp.fresh; delete S.camp.fresh;
-      mine[S.camp.act] = JSON.stringify(S); if (keep) S.camp.fresh = keep; localStorage.setItem(CAMP_KEY, JSON.stringify(all)); } catch (e) { }
+    try { const all = JSON.parse(localStorage.getItem(CAMP_KEY) || '{}'); const keep = S.camp.fresh; delete S.camp.fresh;
+      all[S.camp.act] = JSON.stringify(S); if (keep) S.camp.fresh = keep; localStorage.setItem(CAMP_KEY, JSON.stringify(all)); } catch (e) { }
   }
 
-  // ---------------- the acts ----------------
+  // ---------------- the chapters ----------------
+  const inCity = id => { const c = H.getCity(); return c && c.id === id; };
+  const E = k => () => !!S.camp.ev[k];
+  const ACTS = {
+    1: {
+      art: 'acre', where: 'Acre, spring 1272',
+      intro: () => `Two summers after the truce of Cremona, Ser Matteo Corner, merchant of Venice and master of the Scuola di San Marco, lands at Acre with his apprentice: you, ${S.hero ? S.hero.first : 'his apprentice'}, about twenty years old, and a hold full of Venetian glass and scarlet cloth. In Acre, the last great harbour of the Crusaders, the roads to the East begin.`,
+      teach: ['Find Matteo beside you and press <b>E</b> to talk to him. He goes everywhere you go.', 'The <b>merchant</b> in each city\'s square buys and sells goods, sells food, and offers delivery contracts.', 'Everyone eats one ration a day. Press <b>R</b> in a town to buy food for the next road.', '<b>J</b> opens your journal, <b>T</b> speeds up walking, <b>M</b> opens the map.'],
+      steps: [
+        { id: 'talk1', t: 'Talk to Matteo on the quay', hint: 'He is right beside you. Walk up to him and press E.', done: E('d11') },
+        { id: 'sell', t: 'Sell the Venetian goods in Acre\'s market', hint: 'Find the stall marked "Merchant" in the square, press E, and sell the glass and the scarlet cloth.', done: () => S.camp.ev.soldVen || (!S.cargo.muranoglass && !S.cargo.scarlet) },
+        { id: 'talk2', t: 'Show Matteo your purse', hint: 'Talk to Matteo again (E).', done: E('d12') },
+        { id: 'buy', t: 'Buy goods to sell farther north', hint: () => `Try ${lcName(GOOD[bestFirstGood()].name)}: light, cheap here, and dear in Constantinople. Keep a little silver for food.`, done: E('bought') },
+        { id: 'contract', t: 'Accept the contract to Aleppo', hint: 'On the merchant\'s Market tab: the linen for Aleppo is the first contract. You pay nothing up front.', done: E('contract') },
+        { id: 'damascus', t: 'Travel to Damascus', hint: 'Buy food first (R). Leave by the gate toward Damascus; at a crossroads press the road\'s number, or F to follow it.', done: () => S.visited.includes('damascus') },
+        { id: 'talk3', t: 'Talk to Matteo in Damascus', hint: 'Someone by the fountain is watching you. Talk to Matteo (E).', done: E('d13') },
+        { id: 'aleppo', t: 'Set out for Aleppo', hint: 'Take the road north from Damascus toward Aleppo.', done: E('ambush') },
+        { id: 'riders', t: 'Survive the riders', hint: 'Dawn in the hills.', done: E('fightA') },
+        { id: 'deliver', opt: true, t: 'Deliver the Aleppo contract (optional)', hint: 'Aleppo is north. You are paid on arrival.', done: () => S.camp.ev.delivered || (S.camp.ev.fightA && !(S.contracts || []).some(k => k.id === 'story-linen')) },
+        { id: 'arrive', t: () => `Reach Constantinople with 250 ${CURRENCY}`, hint: () => S.coins < 250 && S.visited.includes('constantinople') ? `You have ${fmt(S.coins)}. Sell your goods here to make up the rest.` : 'From Aleppo: Ayas on the coast, over the Taurus to Konya, then Smyrna, Nicaea and the Bosporus.',
+          done: () => inCity('constantinople') && S.coins >= 250, v: () => `${fmt(S.coins)} / 250` },
+        { id: 'ghisi', t: 'Find Ser Bartolomeo Ghisi in the Venetian quarter', hint: 'He waits by the Scuola\'s house in the square: look for the banner of Saint Mark, and press E.', done: E('d22') },
+      ],
+      end: 'ghisi',
+      outro: 'Ser Bartolomeo Ghisi lends you three hundred dirham against Matteo\'s name. Somewhere east of Tabriz, men in Genoese pay are carrying your master away.',
+    },
+    2: {
+      art: 'city', where: 'Constantinople',
+      intro: 'The Scuola di San Marco cannot be seen moving against Genoa, not with the truce signed. But you are nobody yet, and nobody can go where a Venetian factor cannot. A broker in Tabriz called Bahram sells every secret between the Black Sea and the Gulf, for fifteen hundred dirham.',
+      teach: ['The <b>stables</b> sell pack animals, carts and speed upgrades, and hire guards, guides and interpreters.', 'The <b>Merchants\' Guild</b> runs caravan ventures and errands in each city.', 'A brother of the <b>Scuola di San Marco</b> waits in every market city. Show him Matteo\'s ring: he passes on news, offers the Scuola\'s contracts and takes repayments on your loan.', '<b>Water</b> now counts: in deserts and dry plateaus everyone drinks. Camels drink least. Animals eat fodder.'],
+      steps: [
+        { id: 'animal', opt: true, t: 'Buy a pack animal (recommended)', hint: 'At the stables: a donkey is cheap and patient, a mule carries more, a camel carries most.', done: () => S.packCount() + draftCount() >= 1 },
+        { id: 'tabriz', t: 'Travel to Tabriz', hint: 'East through Rûm, or by Trebizond: trade on the way. Tabriz is the Ilkhan\'s capital.', done: () => S.visited.includes('tabriz') },
+        { id: 'bahram', t: () => `Pay Bahram the Broker 1,500 ${CURRENCY}`, hint: () => inCity('tabriz') ? 'Bahram keeps a table in the caravanserai by the great bazaar. Look for his sign and press E.' : 'Bahram keeps a table in the caravanserai by the great bazaar of Tabriz.', done: E('paidBahram'), v: () => `${fmt(S.coins)} / 1,500` },
+      ],
+      end: 'bahram',
+      outro: '"All the way to Delhi, beyond the Khyber. Five thousand dirham, paid in person at that house." Bahram\'s answer cost you fifteen hundred.',
+    },
+    3: {
+      art: 'road', where: 'Tabriz to Delhi',
+      intro: 'Two months ago Matteo came through Tabriz in chains, and the Tyrian\'s men rode east with him to Delhi, where the Compagna has rented a house to court Sultan Balban\'s officials. The price of his life is five thousand dirham, paid in person. Delhi pays well for the right goods.',
+      teach: ['<b>Market news</b> is now open: festivals, gluts and shortages change prices for weeks.', 'Mountain passes close with winter snow, and the summer monsoon slows travel in India. Plan your road with the calendar in your journal.', 'The road from Tabriz runs by Rayy, Nishapur, Herat and Kabul, and down through the Khyber to Lahore and Delhi.'],
+      steps: [
+        { id: 'raise', live: true, t: () => `Raise 5,000 ${CURRENCY}`, hint: 'Delhi pays extra for horses and other animals, furs, gems and fine textiles from the west.', done: () => S.coins >= 5000, v: () => `${fmt(S.coins)} / 5,000` },
+        { id: 'delhi', t: 'Travel to Delhi', hint: 'Delhi is the Sultanate\'s capital, at the end of the Khyber road.', done: () => S.visited.includes('delhi') && !!H.getCity() && H.getCity().id === 'delhi' },
+      ],
+      end: 'delhi',
+      outro: 'You come into Delhi past the red walls and the great victory tower. Somewhere in this city, behind a small griffin banner, the Compagna is waiting for your silver.',
+    },
+    4: {
+      art: 'delhi', where: 'Delhi',
+      intro: 'The Compagna\'s house is a walled merchant\'s house with a courtyard, new, small and secret. A small griffin banner hangs over the door.',
+      teach: ['Bring five thousand dirham to the door of the Compagna\'s house and ask for Matteo.'],
+      steps: [
+        { id: 'ransom', live: true, t: () => `Carry 5,000 ${CURRENCY} for the ransom`, hint: 'Trade in Delhi and nearby cities if you are short.', done: () => S.coins >= 5000 || !!S.camp.ev.paidRansom, v: () => `${fmt(S.coins)} / 5,000` },
+        { id: 'house', t: 'Pay the ransom at the Compagna\'s house', hint: 'Look for the griffin banner in Delhi\'s square, and the guard at the door. Press E.', done: E('paidRansom') },
+        { id: 'escape', t: 'Fight your way out of the house', hint: 'Matteo is beside you.', done: E('fightB') },
+        { id: 'matteo', t: 'Stay with Matteo', hint: '', done: E('d42') },
+      ],
+      end: 'matteo',
+    },
+  };
   function bestFirstGood() { // the light good from Acre that gains most by Constantinople, for the guided first trade
     let best = null; for (const g of ECON.offers('acre')) { const G = GOOD[g]; if (G.special || G.w > 0.25) continue; const r = ECON.sellPrice(S, g, 'constantinople', S.day) / ECON.buyPrice(S, g, 'acre', S.day); if (!best || r > best.r) best = { g, r }; }
     return best ? best.g : 'linen';
   }
-  const inCity = id => { const c = H.getCity(); return c && c.id === id; };
-  const ACTS = {
-    1: {
-      art: 'acre', where: 'Acre, June 1272',
-      intro: `Your master, Ser Andrea Dandolo, a Venetian merchant of Acre, died of a fever last week. The house is sold, the servants paid, and you are left with about a hundred dirhams and his last letter: a recommendation to the <b>bailo</b>, the head of the Venetian quarter in Constantinople.<br><br>The road north runs through Damascus and Aleppo, across the Taurus mountains into the Sultanate of Rûm, and down to the Bosporus. Trade along the way, and arrive with something to show for it.`,
-      teach: ['The <b>merchant</b> in each city\'s square buys and sells goods, sells food, and offers delivery contracts.', 'Buy where a good is cheap and sell it where it is dear. The market shows what you paid and what it fetches here.', 'Everyone eats one ration a day. Press <b>R</b> in a town to buy food for the next road.', '<b>J</b> opens your journal, <b>T</b> speeds up walking, <b>M</b> opens the map.'],
-      steps: [
-        { id: 'talk', t: 'Speak to the merchant in Acre\'s square', hint: 'Walk to the stall marked "Merchant" and press E.', done: () => S.camp.ev.talk_merchant },
-        { id: 'contract', t: 'Take the contract from your master\'s old partner', hint: 'On the merchant\'s Market tab, accept the linen to Aleppo for Ser Bonaventura. You pay nothing up front.', done: () => S.camp.ev.contract },
-        { id: 'buy', t: 'Buy goods to sell up north', hint: () => `Try ${lcName(GOOD[bestFirstGood()].name)}: light, cheap here, and dear in Constantinople. Keep some silver for food.`, done: () => S.camp.ev.bought },
-        { id: 'food', t: 'Buy food for the road', hint: 'Press R, or use the merchant\'s Provisions tab. The road to Damascus takes about a week.', done: () => S.camp.ev.food || S.food >= 30 },
-        { id: 'damascus', t: 'Reach Damascus', hint: 'Leave by the gate toward Damascus. At a crossroads, press the number of the road you want, or press F to follow it.', done: () => S.visited.includes('damascus') },
-        { id: 'deliver', t: 'Deliver the linen to Aleppo', hint: 'Aleppo is north of Damascus. You are paid on arrival.', done: () => S.camp.ev.delivered },
-        { id: 'profit', t: 'Sell goods for more than you paid', hint: 'Prices in green beat what you paid. Constantinople pays best for most goods from the south.', done: () => S.camp.ev.profit },
-        { id: 'arrive', t: () => `Reach Constantinople with 250 ${CURRENCY}`, hint: () => S.coins < 250 && S.visited.includes('constantinople') ? `You have ${fmt(S.coins)}. Sell your goods here to make up the rest.` : 'From Aleppo: Ayas on the coast, over the Taurus to Konya, then Smyrna, Nicaea and the Bosporus.',
-          done: () => inCity('constantinople') && S.coins >= 250 && S.cargo.bailoletter, v: () => `${fmt(S.coins)} / 250` },
-      ],
-      end: 'arrive',
-      outro: 'You pass under the Golden Gate into the greatest city in Christendom: palaces and churches, the Hippodrome, and the masts of a thousand ships on the Golden Horn. Somewhere in the Venetian quarter by the harbour, the bailo is waiting for your letter.',
-    },
-    2: {
-      art: 'city', where: 'Constantinople',
-      intro: 'Eleven years ago the Greeks took back their city, and the Venetians lost their old privileges to Genoa. But Venice is back, and its merchants are rebuilding. A young man with a good letter and some silver can find a place here.',
-      teach: ['The <b>stables</b> now sell pack animals, carts and speed upgrades, and hire guards, guides and interpreters.', 'The <b>Merchants\' Guild</b> lends money, sells shares in caravan ventures, and has errands in each city.', '<b>Water</b> now counts: in deserts and dry plateaus everyone drinks. Camels drink least. Animals eat fodder.', 'Crossing into a new realm costs a toll on your cargo; your Venetian privileges halve it.'],
-      steps: [
-        { id: 'bailo', t: 'Present your letter at the Merchants\' Guild', hint: 'Find the stall marked "Merchants\' Guild" in Constantinople and press E.', done: () => S.camp.ev.bailo },
-        { id: 'animal', t: 'Buy a pack animal', hint: 'The stable-master sells donkeys, mules and horses. Each one carries more goods, but eats.', done: () => S.packCount() + draftCount() >= 1 },
-        { id: 'markets', t: 'Sell goods in three different markets', hint: 'The map\'s Markets layer shows the eleven markets. Byzantium and Rûm is one; the Mamluk lands to the south, the Ilkhanate to the east and the Golden Horde across the Black Sea are others.', done: () => (S.camp.mk2 || []).length >= 3, v: () => `${Math.min(3, (S.camp.mk2 || []).length)} / 3` },
-        { id: 'caravan', t: 'Build a caravan of three animals or a cart', hint: 'More animals carry more and earn more on every road.', done: () => S.packCount() >= 3 || draftCount() >= 1 },
-        { id: 'worth', t: () => `Build your net worth to 1,500 ${CURRENCY}`, hint: 'Net worth counts silver, the goods you carry at local prices, and half the value of your animals.', done: () => netWorth() >= 1500, v: () => `${fmt(netWorth())} / 1,500` },
-        { id: 'venture', opt: true, t: 'Optional: back a caravan venture or take a loan', hint: 'At any Merchants\' Guild. Ventures can multiply your stake, or lose it.', done: () => (S.inv || []).length > 0 || !!S.loan || S.camp.ev.venture },
-      ],
-      outro: 'The bailo calls you to his house by the harbour. "The Polo brothers left Acre last year to go back to the Great Khan," he says. "If a pair of merchants from the Rialto can stand before Kublai, so can you. Venice needs men in the East."',
-    },
-    3: {
-      art: 'road', where: 'The road east',
-      intro: 'In 1266 Kublai Khan sent Niccolò and Maffeo Polo home with a request: come back with learned men and oil from the lamp of the Holy Sepulchre. No one can be sure the Polos will make it. You will try too, with a fortune, a worthy gift, and a good name.',
-      teach: ['<b>Market news</b> is now open: festivals, gluts and shortages change prices for weeks.', 'Mountain passes close with winter snow, and the summer monsoon slows travel in India. Plan your road with the calendar in your journal.', 'A Mongol <b>paiza</b> halves tolls and keeps you safe in Mongol lands. Ask the darughachi at Tabriz, Baghdad, Samarkand and other Mongol cities.'],
-      steps: () => goalChecks().map((c, i) => ({ id: 'g' + i, t: c.t.replace(/:.*/, ''), hint: c.t.includes(':') ? c.t.replace(/^[^:]*:\s*/, '') : '', done: () => goalChecks()[i].ok, v: () => goalChecks()[i].v, live: true }))
-        .concat([{ id: 'khan', t: 'Win an audience with Kublai Khan', hint: 'At the palace in Khanbaliq or Shangdu, once the rest is done.', done: () => S.won }]),
-    },
-  };
   function stepsOf(n) { const a = ACTS[n]; if (!a) return []; return typeof a.steps === 'function' ? a.steps() : a.steps; }
   const txt = v => typeof v === 'function' ? v() : v;
   function stepDone(st) { if (!st.live && S.camp.done[st.id]) return true; let d = false; try { d = !!st.done(); } catch (e) { } if (d && !st.live) S.camp.done[st.id] = 1; return d; }
@@ -1499,11 +1529,9 @@
     try {
       const a = S.camp.act, A = ACTS[a]; const steps = stepsOf(a); let newly = [];
       for (const st of steps) { const was = !!S.camp.done[st.id]; if (stepDone(st) && !was && !st.live) newly.push(st); }
-      const req = steps.filter(st => !st.opt);
-      const finished = A.end ? stepDone(steps.find(s => s.id === A.end)) : req.every(st => S.camp.done[st.id] || (st.live && stepDone(st)));
-      if (a < 3 && finished) { advance(); return; }
-      if (a === 4 && finished) { S.camp.act = 5; save(); showFinale(); return; }
-      if (newly.length && !finished) { trackerFlash = 1; updateTracker(true); }
+      const finished = stepDone(steps.find(s => s.id === A.end));
+      if (finished && !ui && !(H.dlgOpen && H.dlgOpen()) && !window.__combatOn) { if (a < 4) advance(); else finish(); return; }
+      if (newly.length) { trackerFlash = 1; updateTracker(true); }
     } finally { checking = false; }
   }
   function advance() {
@@ -1513,6 +1541,10 @@
     refreshVendors();
     saveChapter(); save();
     showStory(to, A.outro, from);
+  }
+  function finish() { // Chapter IV ends with Matteo's death: the brotherhood, then free play
+    S.camp.act = 5; const F = facState(S); F.venice.m = true; F.venice.s = Math.max(F.venice.s, 12); S.rep = Math.min(100, S.rep + 10); delete S.cargo.griffinletter;
+    refreshVendors(); save(); if (H.storyFinale) H.storyFinale(); else showFinale();
   }
   function refreshVendors() {
     const c = H.getCity(); if (!c) { for (const [id, v] of vendorSets) { H.scene.remove(v.group); vendorSets.delete(id); } return; }
@@ -1541,6 +1573,11 @@
       s += `<rect y="84" width="400" height="46" fill="${sea}"/><path d="M0 84 Q60 50 120 70 T240 60 T400 72 V86 H0 Z" fill="#c9b08a" ${st}/><path d="M250 70 V48 h8 v-6 h6 v6 h8 V70 M300 72 V54 h20 v18" fill="#d8bf8a" ${st}/>`;
       s += `<path d="M70 104 h120 q-6 12 -20 12 h-84 q-12 0 -16 -12 Z" fill="#7a4a24" ${st}/><path d="M128 104 V44 M128 46 Q96 66 100 98 L128 98 Z" fill="#f3e7cc" ${st}/><path d="M128 44 l14 -5 l-14 -3" fill="${red}" ${st}/>`;
       for (let i = 0; i < 7; i++) s += `<path d="M${84 + i * 14} 112 l-8 12" ${st}/>`;
+    } else if (kind === 'delhi') {
+      s += `<rect y="96" width="400" height="34" fill="#d8b888"/><path d="M0 96 V70 h120 v-6 h8 v6 h40 v26 Z M250 96 V72 h150 v24 Z" fill="#c08a6a" ${st}/>`;
+      for (let i = 0; i < 12; i++) s += `<path d="M${i * 10 + 2} 70 v-5 h6 v5" fill="#c08a6a" ${st}/>`;
+      s += `<path d="M196 96 L200 16 h10 L214 96 Z" fill="#b9775a" ${st}/><path d="M197 72 h16 M198 52 h14 M199 34 h12" ${st}/><path d="M196 16 h18 l-3 -5 h-12 Z" fill="#c08a6a" ${st}/>`;
+      s += `<path d="M300 72 V54 h12 v18 M306 54 V40" fill="none" ${st}/><path d="M306 40 l16 4 l-16 4 Z" fill="#f0ece0" ${st}/><path d="M306 44 h16" stroke="#a8201a" stroke-width="2"/>`;
     } else if (kind === 'palace') {
       s += `<rect y="100" width="400" height="30" fill="#c8ab72"/><path d="M110 100 V70 h180 v30 Z" fill="#b84a2c" ${st}/><path d="M86 72 Q200 54 314 72 L290 58 Q200 44 110 58 Z" fill="#3a5a4a" ${st}/><path d="M130 48 Q200 30 270 48 L254 38 Q200 26 146 38 Z" fill="#3a5a4a" ${st}/><path d="M150 58 V48 h100 v10" fill="#b84a2c" ${st}/>`;
       for (let i = 0; i < 7; i++) s += `<path d="M${124 + i * 26} 100 V74" ${st}/>`;
@@ -1551,10 +1588,10 @@
     const A = ACTS[n]; if (!A) return;
     ui = 'story'; for (const k in H.keys) H.keys[k] = false; H.player.auto = false; if (document.pointerLockElement) document.exitPointerLock(); H.setPauseWanted(false);
     panel.className = 'mx-panel mx-storyp';
-    const done = prevAct ? `<div class="mx-done">Act ${ROMAN[prevAct]} complete · ${ACT_NAMES[prevAct]}</div><p class="mx-prev">${prevText}</p><div class="mx-orn"></div>` : '';
+    const done = prevAct ? `<div class="mx-done">Chapter ${ROMAN[prevAct]} complete · ${ACT_NAMES[prevAct]}</div><p class="mx-prev">${prevText}</p><div class="mx-orn"></div>` : '';
     const goals = stepsOf(n).filter(s => !s.opt).map(s => `<li>${txt(s.t)}</li>`).join('');
-    panel.innerHTML = `<div class="mx-win mx-story">${sceneSVG(A.art)}${done}<div class="mx-eyebrow">${A.where}</div><div class="mx-wt">Act ${ROMAN[n]}: ${ACT_NAMES[n]}</div><div class="mx-orn"></div>
-      <p>${A.intro}</p>${A.teach ? `<div class="mx-ct">${n === 1 ? 'How it works' : 'Now open to you'}</div><ul class="mx-list">${A.teach.map(t => `<li>${t}</li>`).join('')}</ul>` : ''}
+    panel.innerHTML = `<div class="mx-win mx-story">${sceneSVG(A.art)}${done}<div class="mx-eyebrow">${A.where}</div><div class="mx-wt">Chapter ${ROMAN[n]}: ${ACT_NAMES[n]}</div><div class="mx-orn"></div>
+      <p>${txt(A.intro)}</p>${A.teach ? `<div class="mx-ct">${n === 1 ? 'How it works' : 'Now open to you'}</div><ul class="mx-list">${A.teach.map(t => `<li>${t}</li>`).join('')}</ul>` : ''}
       <div class="mx-ct">Objectives</div><ul class="mx-list mx-goals">${goals}</ul><button class="mx-big" data-act="close">${prevAct ? 'Continue' : 'Set out'}</button></div>`;
     ov.classList.add('show');
   }
@@ -1566,20 +1603,22 @@
     if (!S.camp) { trk.style.display = 'none'; return; }
     trkT--; if (trkT > 0 && !force) return; trkT = 20;
     const a = Math.min(4, S.camp.act); const steps = stepsOf(a);
-    if (S.camp.act > 4) { trk.innerHTML = `<div class="mx-ot">Matteo's story · complete</div><div class="mx-oh">${S.camp.consulOf === 'genoa' ? 'Genoese consul at Caffa' : 'Venetian consul at Tabriz'}. The road is yours.</div>`; trk.style.display = ''; return; }
+    if (S.camp.act > 4) { trk.innerHTML = `<div class="mx-ot">The story · Chapters I–IV complete</div><div class="mx-oh">A brother of the Scuola di San Marco. The road is yours; Lanfranco Zaccaria is still out there.</div>`; trk.style.display = ''; return; }
     const open = steps.filter(st => !stepDone(st)); const cur = open.find(st => !st.opt);
     const shown = steps.filter(st => stepDone(st)).slice(-2).concat(open.slice(0, 4));
-    trk.innerHTML = `<div class="mx-ot">Act ${ROMAN[a]} · ${ACT_NAMES[a]}</div>` + shown.map(st => { const d = stepDone(st); return `<div class="mx-oi${d ? ' ok' : ''}${st === cur ? ' cur' : ''}${st.opt ? ' opt' : ''}">${d ? '✔' : '○'} ${txt(st.t)}${st.v && !d ? ` <i>${txt(st.v)}</i>` : ''}</div>`; }).join('') +
-      (cur && cur.hint ? `<div class="mx-oh">${txt(cur.hint)}</div>` : '');
+    trk.innerHTML = `<div class="mx-ot">Chapter ${ROMAN[a]} · ${ACT_NAMES[a]}</div>` + shown.map(st => { const d = stepDone(st); return `<div class="mx-oi${d ? ' ok' : ''}${st === cur ? ' cur' : ''}${st.opt ? ' opt' : ''}">${d ? '✔' : '○'} ${txt(st.t)}${st.v && !d ? ` <i>${txt(st.v)}</i>` : ''}</div>`; }).join('') +
+      (cur && txt(cur.hint) ? `<div class="mx-oh">${txt(cur.hint)}</div>` : '');
     trk.style.display = ''; if (hudEl) trk.style.top = (hudEl.offsetTop + hudEl.offsetHeight + 10) + 'px';
     if (trackerFlash) { trackerFlash = 0; trk.classList.remove('flash'); void trk.offsetWidth; trk.classList.add('flash'); }
   }
   function campJournalHtml() {
-    const a = Math.min(4, S.camp.act);
-    let h = `<p><b>Matteo Corner</b>, a young Venetian factor. ${S.camp.act > 4 ? `Your story is complete: you are ${S.camp.consulOf === 'genoa' ? 'Genoese consul at Caffa' : 'Venetian consul at Tabriz'}. The road is yours.` : `Act ${ROMAN[a]}: <b>${ACT_NAMES[a]}</b>.`}</p>`;
+    const a = Math.min(4, S.camp.act); const h0 = S.hero;
+    let h = `<div class="mx-introhead">${h0 && window.HERO ? HERO.portrait(h0, 74) : ''}<div><p><b>${heroName()}</b>, ${S.camp.act > 4 ? 'a brother of the Scuola di San Marco' : 'Ser Matteo Corner\'s apprentice'}. ${S.camp.act > 4 ? 'Chapters I–IV are complete. The road is yours.' : `Chapter ${ROMAN[a]}: <b>${ACT_NAMES[a]}</b>.`}</p></div>${h0 && window.HERO ? `<div style="margin-left:auto" title="Your merchant's mark">${HERO.sealSVG(h0, 58)}</div>` : ''}</div>`;
     if (S.camp.act <= 4) h += '<ul class="mx-checks">' + stepsOf(a).map(st => { const d = stepDone(st); return `<li class="${d ? 'ok' : ''}">${d ? '✔' : '○'} ${txt(st.t)}${st.v ? ` <span class="mx-dim">(${txt(st.v)})</span>` : ''}<br><span class="mx-dim">${txt(st.hint) || ''}</span></li>`; }).join('') + '</ul>';
-    h += `<div class="mx-ct">The story so far</div><ol class="mx-list">${[1, 2, 3, 4].map(n => `<li class="${n < S.camp.act ? 'mx-ok' : n === S.camp.act ? '' : 'mx-dim'}">Act ${ROMAN[n]}: ${ACT_NAMES[n]}${n < S.camp.act ? ' ✔' : ''}</li>`).join('')}</ol>`;
-    return h + `<p class="mx-dim"><b>${charOf(S).ability.name}:</b> ${charOf(S).ability.text} Every act you reach is saved as a chapter you can replay from the start screen.</p>`;
+    if (S.scuolaDebt > 0) h += `<p>You owe the Scuola di San Marco <b>${fmt(S.scuolaDebt)} ${CURRENCY}</b>. Repay it to any brother of the Scuola, when you can.</p>`;
+    if (S.cargo.griffinletter || S.camp.ev.letter) h += `<div class="mx-ct">The letter with the griffin seal</div><blockquote class="mx-letter">"Corner and all he carries to the Tyrian. No one else is to walk away from that road."<br><span>— L. Z.</span></blockquote>`;
+    h += `<div class="mx-ct">The story so far</div><ol class="mx-list">${[1, 2, 3, 4].map(n => `<li class="${n < S.camp.act ? 'mx-ok' : n === S.camp.act ? '' : 'mx-dim'}">Chapter ${ROMAN[n]}: ${ACT_NAMES[n]}${n < S.camp.act ? ' ✔' : ''}</li>`).join('')}</ol>`;
+    return h + `<p class="mx-dim"><b>${charOf(S).ability.name}:</b> ${charOf(S).ability.text} Every chapter you reach is saved: replay it from the character screen.</p>`;
   }
 
   // ---------------- hooks into the game ----------------
@@ -1587,22 +1626,16 @@
   let campT = 0;
   { const o = updateHud; updateHud = function (force) { o(force); if (MODE !== 'journey') return; updateTracker(force); const now = performance.now(); if (S && S.camp && !ui && now - campT > 1000) { campT = now; campCheck(); } }; }
   { const o = waterUse; waterUse = function (s = S) { return unl('water') ? o(s) : 0; }; }
-  { const o = showIntro; showIntro = function () { if (S && S.camp) { showStory(Math.min(4, S.camp.act)); if (S.camp.fresh) { delete S.camp.fresh; saveChapter(); } return; } o(); }; }
-  { const o = maybeEvent; maybeEvent = function () { if (S && S.camp && S.camp.act === 1 && rnd() < 0.55) return; return o(); }; }
-  { const o = openUI; openUI = function (name) {
-    if (S && S.camp && name === 'vendor' && panelState.vendor) { const r = panelState.vendor.role; ev('talk_' + r);
-      if (r === 'guild' && inCity('constantinople') && S.cargo.bailoletter) { delete S.cargo.bailoletter; S.rep = Math.min(100, S.rep + 10); S.camp.ev.bailo = 1; save();
-        o(name); ui = 'story'; panel.className = 'mx-panel mx-storyp';
-        panel.innerHTML = `<div class="mx-win mx-story">${sceneSVG('city')}<div class="mx-eyebrow">The Venetian quarter</div><div class="mx-wt">The Bailo</div><div class="mx-orn"></div><p>The bailo, Marco Gradenigo, breaks the seal and reads. "Andrea Dandolo was a good man, God rest him, and he says you are honest and quick with numbers." He looks you over. "We are few here since the Greeks came back, and the Genoese have the best of everything. Show me you can build a caravan and a fortune, and Venice will remember you."</p><p class="mx-ok">Reputation +10. The guild will lend to you and sell you shares in its ventures.</p><button class="mx-big" data-act="close">Continue</button></div>`;
-        campCheck(); return; } }
-    return o(name); }; }
+  { const o = showIntro; showIntro = function () { if (S && S.camp) { if (S.camp.act > 4) return; if (S.camp.fresh) { delete S.camp.fresh; saveChapter(); } if (H.storyIntro && H.storyIntro()) return; showStory(Math.min(4, S.camp.act)); return; } o(); }; }
+  { const o = maybeEvent; maybeEvent = function () { if (S && S.camp && S.camp.act <= 1 && rnd() < 0.55) return; if (S && S.camp && H.storyNoEvents && H.storyNoEvents()) return; return o(); }; }
+  { const o = openUI; openUI = function (name) { if (S && S.camp && name === 'vendor' && panelState.vendor) ev('talk_' + panelState.vendor.role); return o(name); }; }
   { const o = act; act = function (a, d) {
     if (!S || !S.camp) return o(a, d);
-    const foodB = S.food; o(a, d);
+    const foodB = S.food; const had = (S.cargo.muranoglass || 0) + (S.cargo.scarlet || 0); o(a, d);
     if (a === 'buy') ev('bought');
     if ((a === 'supply' && d.k === 'food') || a === 'restock' || a === 'supply1each') { if (S.food > foodB) ev('food'); }
-    if (a === 'contract' && (S.contracts || []).length) ev('contract');
-    if (a === 'vinvest' || a === 'loan') ev('venture');
+    if (a === 'contract' && (S.contracts || []).some(k => k.id === 'story-linen')) ev('contract');
+    if (a === 'sell' && had && !S.cargo.muranoglass && !S.cargo.scarlet && S.camp.act === 1) ev('soldVen');
     campCheck(); };
   }
   // profit shown on every sale, story or not
@@ -1615,17 +1648,49 @@
     else { S.profit = (S.profit || 0) + got; H.showToast('Sold', `${sold} ${GOOD[g].unit}${sold > 1 ? 's' : ''} of ${lcName(GOOD[g].name)} for ${fmt(got)} ${CURRENCY}.`, 'Market'); if (S.camp) ev('profit'); }
   }; }
   { const o = H.onCity; H.onCity = function (c) {
-    const deliv = S && S.camp && c && (S.contracts || []).some(k => k.to === c.id);
+    const deliv = S && S.camp && c && (S.contracts || []).some(k => k.to === c.id && k.id === 'story-linen');
     o(c); if (deliv) ev('delivered');
-    if (S && S.camp && S.camp.act === 1 && c && c.id === 'constantinople' && S.coins < 250 && S.cargo.bailoletter) setTimeout(() => H.showToast('Constantinople', `You have reached the Queen of Cities with ${fmt(S.coins)} ${CURRENCY}. Sell your goods to make up 250 before you present yourself.`, 'Act I'), 5000);
+    if (S && S.camp && S.camp.act === 1 && S.camp.ev.fightA && c && c.id === 'constantinople' && S.coins < 250) setTimeout(() => H.showToast('Constantinople', `You have reached the Queen of Cities with ${fmt(S.coins)} ${CURRENCY}. Sell your goods to make up 250 before you look for Ser Bartolomeo.`, 'Chapter I'), 5000);
     campCheck(); }; }
   { const o = cityContracts; cityContracts = function (c) {
     const out = o(c); if (!S || !S.camp || S.camp.act !== 1 || c.id !== 'acre' || (S.takenC && S.takenC['story-linen'])) return out;
     const km = Math.round(distFrom('acre').aleppo || 510);
-    return [{ id: 'story-linen', g: 'linen', n: 8, to: 'aleppo', from: 'acre', km, hops: 2, reward: 90, days: 45, selfProfit: 0, client: 'Ser Bonaventura, your master\'s old partner' }].concat(out.slice(0, 2)); }; }
-  { const o = showWin; showWin = function (title, text) { o(title, text); if (!S.camp) return; S.camp.act = 4; save(); const r = panel.querySelector('.mx-rank');
-    if (r) r.insertAdjacentHTML('afterend', `<div class="mx-ct">What comes next</div><p>Word of a young Venetian at the Khan's court travels fast. When you return west, the merchants of the Rialto will want to hear your tales, and the Venetian guild may offer you a seat. When you leave the palace, <b>Act IV, A Seat in the Guild</b>, begins.</p>`); }; }
+    return [{ id: 'story-linen', g: 'linen', n: 8, to: 'aleppo', from: 'acre', km, hops: 2, reward: 90, days: 60, selfProfit: 0, client: 'Ser Bonaventura, an old friend of Matteo\'s' }].concat(out.slice(0, 2)); }; }
+  // the Khan's audience is not part of this story: it stays open in the open journey only
+  { const o = findInteraction; findInteraction = function () { o(); if (S && S.camp && near && near.kind === 'audience') near = null; }; }
 
+  // ---------------- the Scuola di San Marco: a brother in every market city ----------------
+  const SCUOLA_NAMES = ['Ser Pietro Badoer', 'Ser Giacomo Zeno', 'Ser Marino Morosini', 'Ser Nicolò Querini', 'Ser Lorenzo Soranzo', 'Ser Andrea Michiel', 'Ser Tommaso Bembo', 'Ser Filippo Giustinian'];
+  const SCUOLA_CITIES = new Set((typeof MARKETS_DATA !== 'undefined' ? MARKETS_DATA.flatMap(m => m.stars || []) : []));
+  ROLES.scuola = 'brother of the Scuola di San Marco';
+  { const o = vendorRoles; vendorRoles = function (c) { const r = o(c); if (c && S && unl('scuola') && SCUOLA_CITIES.has(c.id) && (!S.camp || S.camp.act >= 2)) r.push('scuola'); return r; }; }
+  function scuolaContracts(c) {
+    const period = Math.floor(S.day / 25); const r = seeded('scuola' + c.id + period); const dist = distFrom(c.id), hops = hopsFrom(c.id);
+    const dests = [...SCUOLA_CITIES].filter(id => id !== c.id && dist[id] < 2600 && hops[id] >= 2); const goods = ECON.offers(c.id).filter(g => !GOOD[g].special && 'cur'.includes(GOOD[g].rar || 'c')); if (!dests.length || !goods.length) return [];
+    const out = [];
+    for (let i = 0; i < 2; i++) { const to = dests[Math.floor(r() * dests.length)]; const g = goods[Math.floor(r() * goods.length)]; const G = GOOD[g]; const km = dist[to]; const id = `sc-${c.id}-${period}-${i}`; if (S.takenC && S.takenC[id]) continue; if (out.some(k => k.to === to)) continue;
+      const n = Math.max(1, Math.round((1 + r()) / G.w)); out.push({ id, g, n, to, from: c.id, km: Math.round(km), hops: hops[to], reward: Math.round(Math.max(60, 45 + km * 0.1 + n * ECON.mid(g, c.id, S.day) * 0.2)), days: Math.ceil(km / 15) + 15, selfProfit: 0, client: 'the Scuola di San Marco', fac: 'venice' }); }
+    return out;
+  }
+  function scuolaNews() {
+    if (!S.camp || S.camp.act > 4) return 'Lanfranco Zaccaria\'s galleys have been seen off Pera. The brothers watch the Genoese, and the Genoese watch the brothers.';
+    return { 1: 'Bartolomeo Ghisi is waiting for you in Constantinople.', 2: 'Bahram the Broker keeps his table in the caravanserai by the great bazaar of Tabriz. Speak Matteo\'s name softly there: the Genoese are as thick as flies.', 3: 'The road to Delhi runs by Rayy, Nishapur, Herat and Kabul, then through the Khyber to Lahore. Delhi pays well for horses, furs, gems and good cloth from the west.', 4: 'The Compagna\'s house in Delhi is new, small and secret. Go armed.' }[S.camp.act] || '';
+  }
+  function renderScuola(c) {
+    const v = panelState.vendor; let h = `<div class="mx-dlgq"><p><i>${S.camp && S.camp.act <= 4 ? `"Matteo Corner's ring! Then you're one of ours, near enough. Almost one of us, mind: you're not a brother yet."` : `"Brother ${S.hero ? S.hero.first : ''}! Welcome. What does the Scuola owe you, or you the Scuola?"`}</i></p></div>`;
+    h += `<div class="mx-ct">News from the brothers</div><p>${scuolaNews()}</p><p class="mx-dim">${M.rumour ? M.rumour() : ''}</p>`;
+    if (S.scuolaDebt > 0) h += `<div class="mx-ct">Your debt to the Scuola</div><p>You owe <b>${fmt(S.scuolaDebt)} ${CURRENCY}</b>, lent against Matteo's name. No interest; the Scuola has a long memory and even longer ledgers.</p><p>${[100, 300].map(a => `<button data-act="screpay" data-a="${a}" ${S.coins < 1 ? 'disabled' : ''}>Repay ${a}</button>`).join(' ')} <button data-act="screpay" data-a="all" ${S.coins < 1 ? 'disabled' : ''}>Repay all you can</button></p>`;
+    const list = scuolaContracts(c); const mine = S.contracts || [];
+    h += `<div class="mx-ct">The Scuola's contracts</div><table class="mx-tb wide"><tr><th>Consignment</th><th>Deliver to</th><th>Time</th><th>Pay</th><th></th></tr>`;
+    if (!list.length) h += '<tr><td colspan="5" class="mx-dim">Nothing to carry right now. New contracts come every 25 days.</td></tr>';
+    for (const k of list) { const G = GOOD[k.g]; h += `<tr data-route="${k.from}|${k.to}"><td class="mx-gc">${ICONS(k.g, 32)}<div><b>${k.n} ${G.unit}${k.n > 1 ? 's' : ''} of ${lcName(G.name)}</b><br><span class="mx-dim">${fmt1(G.w * k.n)} loads</span></div></td><td>${W.cityById[k.to].name}<br><span class="mx-dim">${fmt(mi(k.km))} mi</span></td><td>${k.days} days</td><td><b>${fmt(k.reward)}</b><br><span class="mx-dim">and standing with the Scuola</span></td><td><button data-act="sccontract" data-id="${k.id}" ${mine.length >= 3 ? 'disabled' : ''}>Accept</button></td></tr>`; }
+    return h + '</table><div class="mx-note">The Scuola keeps a brother in every market city (the larger stars on the map\'s Markets layer). Its contracts go from one market city to another.</div>';
+  }
+  { const o = act; act = function (a, d) {
+    if (a === 'screpay') { const amt = Math.min(S.scuolaDebt || 0, S.coins, d.a === 'all' ? 1e9 : +d.a); S.coins -= amt; S.scuolaDebt = Math.max(0, (S.scuolaDebt || 0) - amt); if (!S.scuolaDebt) { facState(S).venice.s = Math.min(100, facState(S).venice.s + 5); H.showToast('The Scuola di San Marco', 'Your debt is paid. The brother writes it off in a ledger as thick as a Bible.', 'Scuola'); } render(); updateHud(true); return; }
+    if (a === 'sccontract') { const c = W.cityById[nearestCityId()]; const k = scuolaContracts(c).find(k => k.id === d.id); if (!k) return; if ((S.contracts || []).length >= 3) { H.showToast('Too many contracts', 'You can carry at most three contracts at once.', 'Contracts'); return; } if (load() + GOOD[k.g].w * k.n > capacity() + 1e-6) { H.showToast('No room', 'Your animals cannot carry this consignment.', 'Contracts'); return; }
+      (S.contracts = S.contracts || []).push(Object.assign({}, k, { due: S.day + k.days })); (S.takenC = S.takenC || {})[k.id] = 1; render(); return; }
+    return o(a, d); }; }
   // ---------------- styles ----------------
   { const st = document.createElement('style'); st.textContent = `
     html body .mx-obj { position:absolute; left:16px; top:160px; width:280px; padding:8px 12px 9px; background:rgba(247,236,211,.62); border:1px solid rgba(122,31,18,.3); box-shadow:0 3px 10px rgba(40,20,0,.18); border-radius:3px; color:var(--ink, #3a2414); font-family:var(--book, Georgia, serif); font-size:13.5px; line-height:1.35; pointer-events:none; }
@@ -1636,6 +1701,9 @@
     html body .mx-story .mx-scene { width:100%; height:auto; max-height:140px; display:block; margin:-4px 0 8px; }
     html body .mx-story .mx-done { font-family:var(--disp, Cinzel, serif); letter-spacing:.14em; font-size:13px; color:#3a6a2a; text-transform:uppercase; } html body .mx-story .mx-prev { font-style:italic; }
     html body .mx-story .mx-goals li { margin:1px 0; } html body .mx-storyp { max-width:660px; } html body .mx-story p { margin:6px 0; } html body .mx-story .mx-list li { margin:1px 0; } html body .mx-story .mx-wt { font-size:27px; margin:2px 0; } html body .mx-story .mx-orn { margin:6px 0 8px; }
+    html body .mx-introhead { display:flex; gap:16px; align-items:center; text-align:left; } html body .mx-introhead svg.portrait { border:2px solid #8a6a3a; flex:none; }
+    html body .mx-letter { margin:6px 0; padding:8px 14px; font-style:italic; background:#f8eed6; border-left:3px solid #a8201a; } html body .mx-letter span { display:block; text-align:right; font-style:normal; }
+    html body .mx-dlgq { padding:4px 12px; background:rgba(201,164,74,.12); border-left:3px solid #b8862a; margin-bottom:6px; }
     html body tr.mx-hl td { background:rgba(201,164,74,.22); } html body tr.mx-hl td:first-child { box-shadow:inset 3px 0 0 var(--rubric, #7a1f12); }
     body:not(.journey) .mx-obj { display:none; }
   `; document.head.appendChild(st); }
@@ -1673,10 +1741,10 @@
     h += `<div class="mx-facbar"><div style="width:${st.s}%;background:${F.color}"></div>${FAC_RANKS.map(([t]) => `<i style="left:${t}%"></i>`).join('')}</div>`;
     h += `<p><b>Your standing: ${Math.round(st.s)}</b> · ${facRank(S, f)}${st.m ? '' : can ? ' (not a member)' : ''}. ${F.rival ? `Their rivals are the ${FACTIONS[F.rival].name}.` : ''}</p>`;
     // membership
-    const invited = S.camp && S.camp.act === 4 && f === 'venice';
+    const invited = false;
     if (!st.m) {
       if (!can) h += `<p class="mx-dim">${st.traitor ? 'You betrayed this house. Its doors are closed to you for good.' : `The ${F.name} admit only ${F.who}. Your standing still earns you better prices in their cities${F.spices ? ' and lowers what outsiders pay for spices here' : ''}.`}</p>`;
-      else if (R && R.m) h += `<p>${st.s >= 10 ? `${F.head.charAt(0).toUpperCase() + F.head.slice(1)} would take you in, but you are sworn to the ${FACTIONS[F.rival].name}. Going over means leaving them for good.` : `Earn standing 10 with this house (its contracts, profitable trade here, or backing its ventures) and ${F.head} may take you in, even from the ${FACTIONS[F.rival].name}.`}</p>${st.s >= 10 ? `<button data-act="fjoin" data-f="${f}" class="mx-warnbtn">Go over to the ${F.short}s</button>` : ''}`;
+      else if (R && R.m) h += `<p class="mx-dim">Sworn brothers of the ${FACTIONS[F.rival].name} cannot join the ${F.name}.</p>`; else if (false) h += `<p>${st.s >= 10 ? `${F.head.charAt(0).toUpperCase() + F.head.slice(1)} would take you in, but you are sworn to the ${FACTIONS[F.rival].name}. Going over means leaving them for good.` : `Earn standing 10 with this house (its contracts, profitable trade here, or backing its ventures) and ${F.head} may take you in, even from the ${FACTIONS[F.rival].name}.`}</p>${st.s >= 10 ? `<button data-act="fjoin" data-f="${f}" class="mx-warnbtn">Go over to the ${F.short}s</button>` : ''}`;
       else if (st.s >= 10 || invited) h += `<p>${invited ? 'The bailo\'s invitation is waiting for you here: your tales of the Khan\'s court have reached Venice.' : `${F.head.charAt(0).toUpperCase() + F.head.slice(1)} has watched your work and would take you in.`}</p><button data-act="fjoin" data-f="${f}">Join the ${F.name}</button>`;
       else h += `<p class="mx-dim">Earn standing 10 to be invited to join: carry the house's contracts, trade at a profit in its cities, or back its ventures at the guild.</p>`;
     }
@@ -1694,7 +1762,7 @@
     return h + '</table><div class="mx-note">Standing also rises when you sell at a profit in the house\'s cities, and when you back ventures at the guild there. Members lose standing with their rivals as they rise.</div>';
   }
   // ---------------- Act IV missions ----------------
-  const A4 = () => (S.camp && S.camp.act === 4) ? (S.camp.a4 = S.camp.a4 || {}) : null;
+  const A4 = () => null; // v21: the Act IV missions are out of the story for now
   function missionHtml(c, f) {
     const m = A4(); if (!m) return ''; let h = '';
     if (f === 'genoa' && c.id === 'caffa' && FS().venice.m && !S.camp.ev.outbid) h += `<div class="mx-ct">Mission: the furs of Caffa</div><p>A caravan of sable has come down from the north, and the Genoese mean to have it. Outbid them for the guild: 300 ${CURRENCY} for 6 bundles (6 loads). The Genoese will not forget it.</p><button data-act="foutbid" ${S.coins < 300 || freeSpace() < 6 ? 'disabled' : ''}>Outbid the Genoese (300)</button>${freeSpace() < 6 ? ' <span class="mx-dim">You need room for 6 loads.</span>' : ''}`;
@@ -1729,42 +1797,13 @@
   function factionsJournalHtml() {
     let h = '<p>Each merchant house keeps its own account of you. Standing rises with its contracts, with profitable trade in its cities, and with ventures backed at its guilds. Only members climb the ranks, and only those of the right faith may join.</p><table class="mx-tb wide"><tr><th>House</th><th>Standing</th><th>Rank</th><th>Houses in</th></tr>';
     for (const f of FAC_ORDER) { const F = FACTIONS[f], st = FS()[f]; h += `<tr><td><b style="color:${F.color}">⚑</b> <b>${F.name}</b><br><span class="mx-dim">${F.who}${F.rival ? ' · rivals of the ' + FACTIONS[F.rival].name : ''}</span></td><td>${Math.round(st.s)} / 100</td><td>${facRank(S, f)}${!facCanJoin(S, f) && !st.m ? '<br><span class="mx-dim">' + (st.traitor ? 'you betrayed them' : 'cannot join') + '</span>' : ''}</td><td>${F.cities.map(nm).join(', ')}</td></tr>`; }
-    return h + '</table><div class="mx-note">Every house is a tab in the Merchants\' Guild of its cities. Members of rank Member and above can buy the house\'s own goods there: Murano glass and scarlet broadcloth for Venice, Phocaean alum and Chian mastic for Genoa.</div>';
+    return h + '</table><div class="mx-note">Every house is a tab in the Merchants\' Guild of its cities. Members of rank Member and above can buy the house\'s own goods there: Venetian glass and scarlet broadcloth for the Scuola, Phocaean alum and Chian mastic for Genoa.</div>';
   }
 
-  // ---------------- Act IV of Matteo's story ----------------
-  ACTS[4] = {
-    art: 'harbour', where: 'The road west',
-    intro: 'Kublai listens to your tales for three nights, then sends you west with a golden paiza and letters for the Doge. Word of a young Venetian at the Khan\'s court runs ahead of you down the roads, and the bailo writes: the guild has a seat for you, if you want it.<br><br>Venice and Genoa are fighting for the Black Sea. A man with friends at the Khan\'s court could tip the balance, for either of them.',
-    teach: ['<b>Merchant houses</b> are now open: the Venetian, Genoese and Kārimī. Find them as tabs in the Merchants\' Guild of their cities, and in the journal\'s <b>Factions</b> tab.', 'Standing with a house rises with its contracts, profitable trade in its cities, and ventures backed there. Members climb from Associate to Master.', 'Members of rank Member can buy the house\'s own goods: Murano glass and scarlet broadcloth for Venice.', 'Two new ports: <b>Caffa</b> in the Crimea and <b>Tana</b> at the mouth of the Don.', '<b>Ships</b>: the harbour master in each port books passage on galleys, dhows and junks. You ride on deck while the crew sails.', '<b>Property</b>: warehouses, caravanserai shares and workshops, in the guild\'s Property tab. Each house also has a quarter in town, with its own goods and wares.'],
-    steps: () => {
-      const g = S.camp.side === 'genoa';
-      if (g) return [
-        { id: 'gjoin', t: 'Go over to the Genoese', done: () => FS().genoa.m },
-        { id: 'gfactor', t: 'Rise to Factor of the Genoese', hint: 'Carry the Genoese house\'s contracts and trade at a profit in Caffa, Ayas, Tana and Constantinople.', done: () => FS().genoa.s >= 50, v: () => `${Math.round(FS().genoa.s)} / 50` },
-        { id: 'gmaster', t: 'Rise to Master', hint: 'Keep working for the Genoese houses.', done: () => FS().genoa.s >= 80, v: () => `${Math.round(FS().genoa.s)} / 80` },
-        { id: 'consul', t: 'Become Genoese consul at Caffa', hint: 'At the Genoese house in Caffa\'s Merchants\' Guild.', done: () => S.camp.ev.consul },
-      ];
-      const to = S.camp.a4 && S.camp.a4.lettersTo;
-      return [
-        { id: 'join', t: 'Join the Venetian guild', hint: 'At the Venetian house in the Merchants\' Guild of Tabriz, Trebizond, Constantinople, Acre or Tana.', done: () => FS().venice.m },
-        { id: 'letters', t: () => `Carry the guild's letters to ${to ? nm(to) : 'another Venetian house'}`, hint: 'You are paid on arrival.', done: () => S.camp.ev.letters },
-        { id: 'outbid', t: 'Outbid the Genoese for the furs of Caffa', hint: 'Caffa is in the Crimea: by galley from Constantinople or Sinope (ask the harbour master), or by road from Sarai by way of Tana. Go to the Genoese house in its Merchants\' Guild. You need 300 dirhams and room for 6 loads.', done: () => S.camp.ev.outbid },
-        { id: 'furs', t: 'Bring the furs to the Venetian factor at Tana', hint: 'At the Venetian house in Tana\'s Merchants\' Guild.', done: () => S.camp.ev.furs },
-        { id: 'factor', t: 'Rise to Factor of the guild', hint: 'Carry the Venetian houses\' contracts and trade at a profit in their cities.', done: () => FS().venice.s >= 50, v: () => `${Math.round(FS().venice.s)} / 50` },
-        { id: 'master', t: 'Rise to Master', hint: 'Keep working for the Venetian houses.', done: () => FS().venice.s >= 80, v: () => `${Math.round(FS().venice.s)} / 80` },
-        { id: 'consul', t: 'Become Venetian consul at Tabriz', hint: 'At the Venetian house in Tabriz\'s Merchants\' Guild.', done: () => S.camp.ev.consul },
-      ];
-    },
-    end: 'consul',
-  };
-  ACT_NAMES[5] = 'The End';
+  // ---------------- the old Act IV (the consulships) left the main story in v21 ----------------
   function showFinale() {
-    const g = S.camp.consulOf === 'genoa'; ui = 'story'; if (document.pointerLockElement) document.exitPointerLock(); H.setPauseWanted(false); panel.className = 'mx-panel mx-storyp';
-    panel.innerHTML = `<div class="mx-win mx-story">${sceneSVG(g ? 'harbour' : 'city')}<div class="mx-done">Act IV complete · ${ACT_NAMES[4]}</div><div class="mx-eyebrow">${dateOf(S.day)}</div><div class="mx-wt">${g ? 'Consul of Caffa' : 'Consul of Tabriz'}</div><div class="mx-orn"></div>
-      <p>${g ? 'You left Venice for Genoa, and Genoa has made you a lord of the Black Sea. From the consulate on the hill above Caffa you watch the galleys come and go, and the Venetians who once called you brother pay your tolls.' : 'The lion of Saint Mark flies over the consul\'s house in the bazaar of Tabriz. Every Venetian who comes east now passes through your hands, and the boy who left Acre with a hundred dirhams and a dead man\'s letter is a power on the Silk Road.'}</p>
-      <div class="mx-stats"><div><b>${fmt(S.day)}</b><span>days</span></div><div><b>${fmt(netWorth())}</b><span>${CURRENCY} net worth</span></div><div><b>${S.visited.length}</b><span>cities</span></div><div><b>${fmt(S.profit || 0)}</b><span>trading profit</span></div></div>
-      <p class="mx-dim">Matteo's story is complete. The roads, the markets and the houses are still yours: keep trading as long as you like.</p><button class="mx-big" data-act="close">Continue</button></div>`;
+    ui = 'story'; if (document.pointerLockElement) document.exitPointerLock(); H.setPauseWanted(false); panel.className = 'mx-panel mx-storyp';
+    panel.innerHTML = `<div class="mx-win mx-story">${sceneSVG('delhi')}<div class="mx-done">Chapter IV complete · ${ACT_NAMES[4]}</div><div class="mx-wt">A Brother of the Scuola</div><div class="mx-orn"></div><p>Ser Matteo Corner, merchant of Venice, died in Delhi in the year of our Lord 1273. His apprentice carried his ring home.</p><button class="mx-big" data-act="close">Continue</button></div>`;
     ov.classList.add('show');
   }
 
@@ -1790,8 +1829,6 @@
       if (panelState.gtab && panelState.gtab.startsWith('fac_') && !fs.includes(panelState.gtab.slice(4))) panelState.gtab = 'ventures';
       if (A4() && fs.length) { const want = S.camp.side || (c.id === 'caffa' && FS().venice.m && !S.camp.ev.outbid ? 'genoa' : 'venice'); panelState.gtab = 'fac_' + (fs.includes(want) ? want : fs[0]); } }
     return o(name); }; }
-  // Act IV begins once the win screen is closed
-  { const o = closeUI; closeUI = function () { const was = ui; o(); if (S && S.camp && was === 'win' && S.camp.act === 4 && !S.camp.a4intro) { S.camp.a4intro = 1; S.paiza = true; saveChapter(); save(); setTimeout(() => showStory(4, 'Kublai Khan receives you with honour, and asks you about every land you crossed.', 3), 300); } }; }
 
   { const st = document.createElement('style'); st.textContent = `
     html body .mx-fac { display:inline-block; margin-left:8px; padding:0 6px; border:1px solid; border-radius:2px; font-size:12px; font-variant:small-caps; }
@@ -1803,7 +1840,7 @@
   // ============================================================
   //  v18: SHIPS ON AUTOPILOT, QUARTER MERCHANTS, PROPERTY, WARS
   // ============================================================
-  FEATURES.ships = 4; FEATURES.property = 4;
+  FEATURES.ships = 5; FEATURES.property = 5; // v21: after the story (Chapter IV)
   Object.assign(FACTIONS.venice, { quarter: 'Venetian fondaco', qrole: 'factor of the Venetian fondaco' });
   Object.assign(FACTIONS.genoa, { quarter: 'Genoese loggia', qrole: 'factor of the Genoese loggia' });
   Object.assign(FACTIONS.karimi, { quarter: 'Kārimī funduq', qrole: 'agent of the Kārimī funduq' });
@@ -1816,14 +1853,15 @@
   };
   const PORTS = new Set(SEA_LANES.flatMap(l => [l[0], l[1]]));
   const ITALIANS = { venice: ['Marino', 'Pietro', 'Giacomo', 'Andrea', 'Nicolò', 'Lorenzo'], genoa: ['Benedetto', 'Simone', 'Lanfranco', 'Ugolino', 'Oberto', 'Guglielmo'] };
-  function vendorLabel(role) { if (role.startsWith('quarter_')) return FACTIONS[role.slice(8)].quarter; return { merchant: 'Merchant', outfitter: 'Stables & Hiring', guild: 'Merchants\' Guild', harbour: 'Harbour master' }[role] || role; }
+  function vendorLabel(role) { if (role.startsWith('quarter_')) return FACTIONS[role.slice(8)].quarter; return { merchant: 'Merchant', outfitter: 'Stables & Hiring', guild: 'Merchants\' Guild', harbour: 'Harbour master', scuola: 'Scuola di San Marco' }[role] || role; }
   { const o = vendorRoles; vendorRoles = function (c) { const r = o(c); if (!c) return r; if (unl('ships') && PORTS.has(c.id)) r.push('harbour'); if (unl('factions')) for (const f of facsIn(c.id)) r.push('quarter_' + f); return r; }; }
   { const o = spawnVendors; spawnVendors = function (c) { const had = vendorSets.has(c.id); o(c); if (had) return; const vs = vendorSets.get(c.id); if (!vs) return;
-    for (const v of vs.vendors) { const f = v.role.startsWith('quarter_') && v.role.slice(8); if (f && ITALIANS[f]) { let h = 0; for (const ch of c.id + f + (S.seed || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0; v.name = ITALIANS[f][h % ITALIANS[f].length]; } } }; }
+    for (const v of vs.vendors) { if (v.role === 'scuola') { let h = 0; for (const ch of c.id + 'sc') h = (h * 31 + ch.charCodeAt(0)) >>> 0; v.name = SCUOLA_NAMES[h % SCUOLA_NAMES.length]; } const f = v.role.startsWith('quarter_') && v.role.slice(8); if (f && ITALIANS[f]) { let h = 0; for (const ch of c.id + f + (S.seed || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0; v.name = ITALIANS[f][h % ITALIANS[f].length]; } } }; }
   { const o = renderVendor; renderVendor = function () { const v = panelState.vendor; const c = W.cityById[nearestCityId()];
     const title = `${v.name}, ${ROLES[v.role]}`; const sub = `${c.name} · ${REALMS[ECON.realmOf(c.id)].name}`;
     if (v.role === 'harbour') return head(title, sub) + renderHarbour(c);
     if (v.role.startsWith('quarter_')) return head(title, sub) + renderQuarter(c, v.role.slice(8));
+    if (v.role === 'scuola') return head(title, sub) + renderScuola(c);
     return o(); }; }
 
   // ---------------- sea lanes ----------------
@@ -2107,15 +2145,14 @@
   { const o = H.minimapDots; H.minimapDots = function () { const out = o ? o() : []; const c = H.getCity(); const vs = c && vendorSets.get(c.id); if (vs) for (const v of vs.vendors) if (v.role === 'harbour') out.push({ x: v.x, z: v.z, c: '#2a5a8a', big: true }); return out; }; }
 
   // where each story objective is done, for the map's quest pins
-  const STEP_CITY = { talk: 'acre', contract: 'acre', buy: 'acre', damascus: 'damascus', deliver: 'aleppo', arrive: 'constantinople', bailo: 'constantinople', khan: 'khanbaliq', outbid: 'caffa', furs: 'tana',
-    consul: () => S.camp.side === 'genoa' ? 'caffa' : 'tabriz', letters: () => S.camp.a4 && S.camp.a4.lettersTo, join: () => nearestOf(FACTIONS.venice.cities), gjoin: () => nearestOf(FACTIONS.genoa.cities),
-    gfactor: () => nearestOf(FACTIONS.genoa.cities), gmaster: () => nearestOf(FACTIONS.genoa.cities), factor: () => nearestOf(FACTIONS.venice.cities), master: () => nearestOf(FACTIONS.venice.cities) };
+  const STEP_CITY = { talk1: 'acre', sell: 'acre', talk2: 'acre', buy: 'acre', contract: 'acre', damascus: 'damascus', talk3: 'damascus', aleppo: 'aleppo', deliver: 'aleppo', arrive: 'constantinople', ghisi: 'constantinople',
+    tabriz: 'tabriz', bahram: 'tabriz', delhi: 'delhi', house: 'delhi', escape: 'delhi' };
   function nearestOf(ids) { const d = distFrom(nearestCityId()); let b = null; for (const id of ids) if (W.cityById[id] && (b === null || (d[id] ?? 1e9) < (d[b] ?? 1e9))) b = id; return b; }
   function questPins() {
     if (MODE !== 'journey' || !S) return []; const out = [];
     if (S.camp && S.camp.act <= 4) { const steps = stepsOf(S.camp.act); let first = true;
       for (const st of steps) { if (st.opt || stepDone(st)) continue; const m = STEP_CITY[st.id]; const city = typeof m === 'function' ? m() : m;
-        if (city && W.cityById[city]) { const same = out.find(q => q.story && q.city === city); if (same) same.text += `; ${txt(st.t)}`; else out.push({ city, color: '#b8860b', icon: '★', text: `<b>Act ${ROMAN[S.camp.act]}:</b> ${txt(st.t)}`, story: true, cur: first }); } first = false; } }
+        if (city && W.cityById[city]) { const same = out.find(q => q.story && q.city === city); if (same) same.text += `; ${txt(st.t)}`; else out.push({ city, color: '#b8860b', icon: '★', text: `<b>Chapter ${ROMAN[S.camp.act]}:</b> ${txt(st.t)}`, story: true, cur: first }); } first = false; } }
     for (const k of (S.contracts || [])) { const left = Math.max(0, Math.ceil(k.due - S.day)); out.push({ city: k.to, color: left <= 5 ? '#d0451b' : '#7a1f12', icon: String(left), text: `<b>Contract:</b> ${k.n} ${GOOD[k.g].unit}${k.n > 1 ? 's' : ''} of ${lcName(GOOD[k.g].name)} for ${k.client || 'a client'}, due in ${left} day${left === 1 ? '' : 's'}` }); }
     for (const e of (S.errands || [])) { if (!W.cityById[e.to] || e.done) continue; const left = Math.max(0, Math.ceil(e.due - S.day)); if (left <= 0) continue;
       out.push({ city: e.to, color: '#2a5a8a', icon: e.type === 'book' ? 'B' : 'G', text: e.type === 'book' ? `<b>Errand:</b> deliver the scholar's manuscript (pays ${fmt(e.pay)}, ${left} days left)` : `<b>Commission:</b> bring ${e.n} ${GOOD[e.g] ? lcName(GOOD[e.g].name) : e.g} to the governor (pays ${fmt(e.pay)}, ${left} days left)` }); }
@@ -2134,7 +2171,9 @@
     ACTS, ACT_NAMES, stepsOf: n => stepsOf(n), stepDone: st => stepDone(st), campCheck: () => campCheck(), advance: () => advance(), showStory: (n, p, a) => showStory(n, p, a), updateTracker: () => updateTracker(true), goalChecks: () => goalChecks(),
     netWorth: () => netWorth(), capacity: () => capacity(), load: () => load(), speedKm: () => speedKm(), distFrom: id => distFrom(id), nearestCityId: () => nearestCityId(), dateOf, fmt, nm, unl: k => unl(k),
     wars: () => wars(), activeWars: () => activeWars(), warDef: id => warDef(id), spawnMarketEvent: q => spawnMarketEvent(q), RARE, PORTS, closeUI: () => closeUI(), openUI: n => openUI(n), resetTrail: () => resetTrail(),
-    restart: () => restart(), seasonNow: () => seasonNow(), facState: () => FS(), chapters: () => { try { return (JSON.parse(localStorage.getItem(CAMP_KEY) || '{}').venetian) || {}; } catch (e) { return {}; } }, CAMP_KEY, SAVE_KEY };
+    restart: () => restart(), seasonNow: () => seasonNow(), facState: () => FS(), chapters: () => { try { return JSON.parse(localStorage.getItem(CAMP_KEY) || '{}'); } catch (e) { return {}; } }, CAMP_KEY, SAVE_KEY,
+    ev: k => ev(k), finish: () => finish(), heroName, makePerson: (...a) => makePerson(...a), makeAnimal: (...a) => makeAnimal(...a), animate: (...a) => animate(...a), textSprite: t => textSprite(t), vendors: id => (vendorSets.get(id) || {}).vendors || [], render: () => render(), set ui(v) { ui = v; },
+    rebuild: () => { rebuildCaravan(); updateHud(true); }, showWin: (t, x) => showWin(t, x), inCity, scuolaContracts: id => scuolaContracts(W.cityById[id]), ROMAN };
 
   // ---------------- per-frame ----------------
   let slowT = 0;
@@ -2151,115 +2190,3 @@
   try { if (localStorage.getItem(SAVE_KEY)) document.body.classList.add('has-save'); } catch (e) { }
   window.__mech = { merc: () => triggerEvent(MERC_EVENT, eventContext()), contracts: id => cityContracts(W.cityById[id]), dbg: () => ({ followers: followers.map(f => [Math.round(f.obj.position.x - H.player.x), Math.round(f.obj.position.z - H.player.z), f.obj.parent === H.scene]), trail: trail.length, day: S.day, city: H.getCity() && H.getCity().id, roadVis: roadCaravans.filter(c => c.obj).length }), talk: (role, otab) => { const c = H.getCity(); const vs = vendorSets.get(c.id); const v = vs.vendors.find(v => v.role === role); H.player.x = v.x + 1.5; H.player.z = v.z + 1.5; panelState = { tab: role, vendor: v, qty: 1, otab }; openUI('vendor'); }, journal: t => { panelState = { tab: t }; openUI('journal'); }, get S() { return S; }, M, act, triggerEvent: (id) => triggerEvent(EVENTS.find(e => e.id === id), eventContext()), openUI, closeUI, passDays, eventContext, goalChecks, speedKm, capacity, load };
 })();
-
-// ============================================================
-//  BUILD 3: CK3-style start screen — choose a traveller on the map of 1272
-// ============================================================
-(() => {
-  const css = `
-  #charsel { position:fixed; inset:0; z-index:60; display:none; background:#1c140d; color:#f3e7cc; font-family:"EB Garamond", Georgia, serif; }
-  #charsel.show { display:block; }
-  #cs-map { position:absolute; inset:0; width:100%; height:100%; display:block; }
-  #cs-title { position:absolute; left:24px; top:18px; padding:12px 20px; background:linear-gradient(#3a2818ee, #2a1c10ee); border:1px solid #8a6a3a; box-shadow:0 6px 24px #0008; }
-  #cs-title b { display:block; font-family:Cinzel, serif; font-size:24px; letter-spacing:.12em; color:#f0d48a; }
-  #cs-title span { font-style:italic; opacity:.85; font-size:16px; }
-  .cs-pin { position:absolute; transform:translate(-50%, -100%); cursor:pointer; text-align:center; transition:transform .15s; }
-  .cs-pin:hover { transform:translate(-50%, -100%) scale(1.08); }
-  .cs-pin .med { width:62px; height:62px; border-radius:50%; overflow:hidden; border:3px solid #c9a24a; box-shadow:0 4px 14px #000a; margin:0 auto; background:#2a1c10; }
-  .cs-pin.on .med { border-color:#ffe08a; box-shadow:0 0 0 3px #b23a1e, 0 6px 20px #000c; }
-  .cs-pin .med svg { width:100%; height:100%; display:block; }
-  .cs-pin .nm { margin-top:3px; font-family:Cinzel, serif; font-size:12px; letter-spacing:.06em; background:#2a1c10dd; padding:2px 7px; border:1px solid #8a6a3a; white-space:nowrap; }
-  .cs-pin .stem { width:2px; height:14px; background:#c9a24a; margin:0 auto; }
-  .cs-pin .dot { width:9px; height:9px; border-radius:50%; background:#b23a1e; border:2px solid #f3e7cc; margin:-2px auto 0; }
-  #cs-card { position:absolute; right:22px; top:18px; bottom:18px; width:min(410px, 38vw); background:linear-gradient(#f4e8cc, #e8d6ae); color:#2e1e10; border:2px solid #8a6a3a; box-shadow:0 10px 40px #000b; display:flex; flex-direction:column; }
-  #cs-card .hd { display:flex; gap:14px; padding:16px 16px 10px; border-bottom:1px solid #b89a62; background:linear-gradient(#e8d4a8, #e0c896); }
-  #cs-card .hd svg { width:118px; height:118px; flex:none; border:2px solid #8a6a3a; box-shadow:0 3px 10px #0005; }
-  #cs-card .nm { font-family:Cinzel, serif; font-size:22px; line-height:1.15; color:#4a2410; }
-  #cs-card .tt { font-style:italic; font-size:16px; margin:2px 0 6px; }
-  #cs-card .diff { font-size:14px; letter-spacing:.04em; }
-  #cs-card .diff i { color:#b23a1e; font-style:normal; font-size:16px; }
-  #cs-card .bd { padding:10px 18px; overflow:auto; flex:1; font-size:16px; line-height:1.38; }
-  #cs-card h4 { font-family:Cinzel, serif; font-size:13px; letter-spacing:.12em; color:#7a4a1a; margin:12px 0 3px; border-bottom:1px solid #c9ad78; padding-bottom:2px; }
-  #cs-card .bd p { margin:4px 0; }
-  #cs-card .based { font-size:14px; opacity:.8; font-style:italic; }
-  #cs-card .ft { display:flex; gap:10px; padding:12px 16px; border-top:1px solid #b89a62; }
-  #cs-card .ft button { flex:1; font-family:Cinzel, serif; font-size:15px; letter-spacing:.08em; padding:11px; cursor:pointer; border-radius:3px; border:1px solid #2e1c10; }
-  #cs-go { background:linear-gradient(#b23a1e, #8a2a14); color:#fff3dc; } #cs-back { background:linear-gradient(#6b4a2e, #4a3020); color:#f3e7cc; flex:.5 !important; }
-  #cs-row { position:absolute; left:24px; bottom:18px; display:flex; gap:10px; }
-  #cs-row div { width:58px; height:58px; border:2px solid #8a6a3a; cursor:pointer; overflow:hidden; box-shadow:0 3px 10px #000a; }
-  #cs-row div.on { border-color:#ffe08a; box-shadow:0 0 0 2px #b23a1e; } #cs-row svg { width:100%; height:100%; display:block; }
-  .cs-pin.soon .med, #cs-row div.soon { filter:grayscale(1) brightness(.7); } .cs-pin.soon .nm { opacity:.6; }
-  #cs-card.soon .hd svg { filter:grayscale(1); } #cs-card .soonbox { margin:10px 0; padding:8px 12px; border:1px dashed #8a6a3a; font-style:italic; }
-  #cs-card .chap { display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 2px; } #cs-card .chap button { font-family:Cinzel, serif; font-size:13px; padding:6px 10px; cursor:pointer; border:1px solid #6b4a2e; background:#f8eed6; color:#4a2410; border-radius:3px; }
-  #cs-card .acts li { margin:2px 0; } #cs-card .acts { margin:4px 0 0 18px; padding:0; }
-  .mx-introhead { display:flex; gap:16px; align-items:center; text-align:left; } .mx-introhead svg { border:2px solid #8a6a3a; flex:none; }
-  `;
-  const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
-  const root = document.createElement('div'); root.id = 'charsel';
-  root.innerHTML = `<canvas id="cs-map"></canvas><div id="cs-pins"></div><div id="cs-title"><b>Choose your traveller</b><span>Matteo's story begins in Acre, June 1272 · more travellers to come</span></div><div id="cs-row"></div><div id="cs-card"></div>`;
-  document.body.appendChild(root);
-  let sel = 'venetian', onPick = null;
-  const BOX = { lon0: 22, lon1: 123, lat0: 6, lat1: 50 };
-  let view = null;
-  function proj(lon, lat) { const { ox, oy, k } = view; return [ox + (lon - BOX.lon0) * k * Math.cos(32 * Math.PI / 180), oy + (BOX.lat1 - lat) * k]; }
-  function draw() {
-    const cv = document.getElementById('cs-map'); const dpr = Math.min(2, devicePixelRatio || 1); const Wd = innerWidth, Ht = innerHeight;
-    cv.width = Wd * dpr; cv.height = Ht * dpr; const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const cardW = Math.min(410, Wd * .38) + 44; const aw = Wd - cardW, ah = Ht;
-    const kx = aw / ((BOX.lon1 - BOX.lon0) * Math.cos(32 * Math.PI / 180)), ky = ah / (BOX.lat1 - BOX.lat0); const k = Math.min(kx, ky * 1.25);
-    view = { k, ox: (aw - (BOX.lon1 - BOX.lon0) * Math.cos(32 * Math.PI / 180) * k) / 2, oy: Math.max(70, (ah - (BOX.lat1 - BOX.lat0) * k) / 2) };
-    g.fillStyle = '#7fa3a8'; g.fillRect(0, 0, Wd, Ht);
-    const path = (arr, close) => { g.beginPath(); for (let i = 0; i < arr.length; i += 2) { const [x, y] = proj(arr[i] / 100, arr[i + 1] / 100); i ? g.lineTo(x, y) : g.moveTo(x, y); } if (close) g.closePath(); };
-    g.fillStyle = '#e8d6a8'; for (const r of GEO.map.land) { path(r, true); g.fill(); }
-    g.globalAlpha = .28; for (const s of GEO.map.states) { if (s.labOnly) continue; g.fillStyle = s.col; for (const r of s.polys) { path(r, true); g.fill(); } } g.globalAlpha = 1;
-    g.strokeStyle = '#8a6a4a88'; g.lineWidth = 1; for (const s of GEO.map.states) for (const r of s.polys) { path(r, true); g.stroke(); }
-    g.strokeStyle = '#6a9ab0'; g.lineWidth = 1; for (const r of GEO.map.rivers) { path(r, false); g.stroke(); }
-    const byId = {}; for (const c of CITIES) byId[c.id] = c;
-    g.lineWidth = 2.2; g.setLineDash([]);
-    for (const e of EDGES) { const a = byId[e[0]], b = byId[e[1]]; if (!a || !b) continue; g.strokeStyle = (ROUTE_GROUPS[e[2]] || {}).color || '#a0522d'; g.globalAlpha = .75;
-      const pts = [[a.lon, a.lat], ...e[3], [b.lon, b.lat]]; g.beginPath(); pts.forEach((p, i) => { const [x, y] = proj(p[0], p[1]); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.stroke(); }
-    g.globalAlpha = 1;
-    for (const c of CITIES) { const [x, y] = proj(c.lon, c.lat); const r = 1.5 + (CITY_TIER[c.id] || 1) * .7; g.beginPath(); g.arc(x, y, r, 0, 7); g.fillStyle = '#f7efdc'; g.fill(); g.strokeStyle = '#3d2a18'; g.lineWidth = 1; g.stroke(); }
-    // vignette
-    const vg = g.createRadialGradient(aw / 2, ah / 2, ah * .35, aw / 2, ah / 2, Math.max(aw, ah) * .8); vg.addColorStop(0, '#0000'); vg.addColorStop(1, '#000a'); g.fillStyle = vg; g.fillRect(0, 0, Wd, Ht);
-    // pins
-    const pins = document.getElementById('cs-pins'); pins.innerHTML = '';
-    for (const id of CHAR_ORDER) { const C = CHARACTERS[id], c = byId[C.start]; const [x, y] = proj(c.lon, c.lat);
-      const el = document.createElement('div'); el.className = 'cs-pin' + (id === sel ? ' on' : '') + (id !== 'venetian' ? ' soon' : ''); el.style.left = x + 'px'; el.style.top = y + 'px';
-      el.innerHTML = `<div class="med">${portraitSVG(id, 62)}</div><div class="nm">${C.place}</div><div class="stem"></div><div class="dot"></div>`; el.onclick = () => choose(id); pins.appendChild(el); }
-  }
-  function chapters() { try { return (JSON.parse(localStorage.getItem('silkroad_chapters_v1') || '{}').venetian) || {}; } catch (e) { return {}; } }
-  function card() {
-    const C = CHARACTERS[sel]; const diff = ['', 'Easy', 'Normal', 'Hard'][C.difficulty]; const box = document.getElementById('cs-card');
-    const go = (o) => { root.classList.remove('show'); const f = onPick; onPick = null; f && f(sel, o); };
-    const row = () => { document.getElementById('cs-row').innerHTML = CHAR_ORDER.map(id => `<div data-id="${id}" class="${id === sel ? 'on' : ''}${id !== 'venetian' ? ' soon' : ''}" title="${CHARACTERS[id].name}${id !== 'venetian' ? ' (coming soon)' : ''}">${portraitSVG(id, 58)}</div>`).join('');
-      document.querySelectorAll('#cs-row div').forEach(d => d.onclick = () => choose(d.dataset.id)); };
-    if (sel !== 'venetian') {
-      box.className = 'soon';
-      box.innerHTML = `<div class="hd">${portraitSVG(sel, 118)}<div><div class="nm">${C.name}</div><div class="tt">${C.title}</div><div class="diff">Starts in ${C.place}</div></div></div>
-        <div class="bd"><div class="soonbox">This traveller's story is still being written. For now, play Matteo Corner's story.</div><p>${C.story}</p><h4>Inspired by</h4><p class="based">${C.basedOn}</p></div>
-        <div class="ft"><button id="cs-back">Back</button><button id="cs-go" disabled style="opacity:.5;cursor:default">Coming soon</button></div>`;
-      document.getElementById('cs-back').onclick = () => { root.classList.remove('show'); }; row(); return;
-    }
-    box.className = '';
-    const ch = chapters(); const reached = Object.keys(ch).map(Number).filter(n => n > 1).sort();
-    const names = (window.CAMP_ACT_NAMES || {});
-    box.innerHTML = `<div class="hd">${portraitSVG(sel, 118)}<div><div class="nm">${C.name}</div><div class="tt">A young Venetian factor</div><div class="diff">Difficulty: <i>◆◇◇</i> Easy</div><div class="diff">Starts in Acre · Faith: Christian</div></div></div>
-      <div class="bd"><p>Your master, a Venetian merchant of Acre, is dead of a fever. You have his letter of recommendation to the bailo, the head of the Venetian quarter at Constantinople, about a hundred dirhams, and your wits. Get to the Queen of Cities, make your name, and then go further east than any of your family has gone.</p>
-      <h4>The story</h4><ol class="acts"><li><b>To the Queen of Cities:</b> a first journey north from Acre, learning to trade</li><li><b>The Venetian Quarter:</b> build a caravan and a fortune in Constantinople</li><li><b>To the Great Khan:</b> the long road to Kublai's court</li><li><b>A Seat in the Guild:</b> rise in the Venetian guild, or betray it for Genoa</li></ol>
-      ${reached.length ? `<h4>Continue from a chapter</h4><div class="chap">${reached.map(n => `<button data-ch="${n}">Act ${['', 'I', 'II', 'III', 'IV'][n]}${names[n] ? ': ' + names[n] : ''}</button>`).join('')}</div>` : ''}
-      <h4>Ability — ${C.ability.name}</h4><p>${C.ability.text}</p>
-      <h4>Inspired by</h4><p class="based">${C.basedOn} The character is fictional.</p>
-      <p class="based">Prefer to skip the story? The open journey starts you in Constantinople with 500 ${CURRENCY} and everything unlocked.</p></div>
-      <div class="ft"><button id="cs-back">Back</button><button id="cs-open" style="flex:.8;background:linear-gradient(#6b4a2e,#4a3020);color:#f3e7cc">Open journey</button><button id="cs-go">Begin the story</button></div>`;
-    document.getElementById('cs-go').onclick = () => go({ mode: 'story' });
-    document.getElementById('cs-open').onclick = () => go({ mode: 'open' });
-    box.querySelectorAll('[data-ch]').forEach(b => b.onclick = () => go({ mode: 'story', chapter: +b.dataset.ch }));
-    document.getElementById('cs-back').onclick = () => { root.classList.remove('show'); };
-    row();
-  }
-  function choose(id) { sel = id; draw(); card(); }
-  window.openCharSel = (cb) => { onPick = cb; root.classList.add('show'); choose(sel); };
-  addEventListener('resize', () => { if (root.classList.contains('show')) draw(); });
-})();
-

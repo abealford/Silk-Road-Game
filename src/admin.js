@@ -131,15 +131,15 @@
       }
     }
     else if (tab === 'story') {
-      if (!jr) h += needJ; else if (!s.camp) h += '<p class="note">This is an open journey, with no story. Start Matteo\'s story from the title screen to use these tools.</p>'; else {
-        const a = s.camp.act; const AN = J().ACT_NAMES;
-        h += `<h4>Chapters</h4><p>Now in <b>${a <= 4 ? 'Act ' + ['', 'I', 'II', 'III', 'IV'][a] + ': ' + AN[a] : 'the story is complete'}</b>, day ${fmt(s.day)}.</p><div class="row">${[2, 3, 4].map(n => `<button class="b" data-a="skipto" data-n="${n}" ${n <= a ? 'disabled' : ''}>Skip to Act ${['', 'I', 'II', 'III', 'IV'][n]}</button>`).join('')}<span class="note">Skipping fills in what each act would have given you, and takes you to the next act's city.</span></div>`;
+      if (!jr) h += needJ; else if (!s.camp) h += '<p class="note">This is an open journey, with no story. Start the story from the title screen (The Journey, then Begin the story) to use these tools.</p>'; else {
+        const a = s.camp.act; const AN = J().ACT_NAMES; const R = ['', 'I', 'II', 'III', 'IV'];
+        h += `<h4>Chapters</h4><p>Now in <b>${a <= 4 ? 'Chapter ' + R[a] + ': ' + AN[a] : 'free play: the story is complete'}</b>, day ${fmt(s.day)}.</p><div class="row">${[1, 2, 3, 4].map(n => `<button class="b" data-a="skipto" data-n="${n}">Jump to Chapter ${R[n]}</button>`).join('')}<button class="b" data-a="skipto" data-n="5">Jump to the end (free play)</button></div><p class="note">A jump fills in what the earlier chapters would have given you (silver, the ring, the letter, the loan, Bahram's answer) and takes you to the chapter's city.</p>`;
+        h += `<h4>Scenes and fights</h4><div class="row"><button class="b" data-a="scene" data-s="opening">The opening galley</button><button class="b" data-a="scene" data-s="ambush">The ambush on the Aleppo road</button><button class="b" data-a="scene" data-s="fightA">Fight A: the riders at dawn</button><button class="b" data-a="scene" data-s="fightB">Fight B: the Compagna's house</button></div><p class="note">The fights jump the story to just before them: Chapter I after Damascus, or Chapter IV in Delhi with the ransom paid.</p>`;
         if (a <= 4) {
           const steps = J().stepsOf(a);
-          h += `<h4>Objectives of this act</h4><table>${steps.map(st => { const done = J().stepDone(st); return `<tr><td class="${done ? 'ok' : ''}">${done ? '✔' : '○'} ${typeof st.t === 'function' ? st.t() : st.t}${st.opt ? ' <i class="dim">(optional)</i>' : ''}</td><td>${done || st.live ? '' : `<button class="b" data-a="stepdone" data-id="${st.id}">Complete</button>`}</td></tr>`; }).join('')}</table>`;
-          if (a === 3) h += `<div class="row"><button class="b" data-a="audreq">Meet the audience requirements</button><button class="b" data-a="audwin">Win the audience now</button></div>`;
+          h += `<h4>Objectives of this chapter</h4><table>${steps.map(st => { const done = J().stepDone(st); return `<tr><td class="${done ? 'ok' : ''}">${done ? '✔' : '○'} ${typeof st.t === 'function' ? st.t() : st.t}${st.opt ? ' <i class="dim">(optional)</i>' : ''}</td><td>${done || st.live ? '' : `<button class="b" data-a="stepdone" data-id="${st.id}">Complete</button>`}</td></tr>`; }).join('')}</table>`;
         }
-        const ch = J().chapters(); h += `<h4>Chapter saves</h4><div class="row">${Object.keys(ch).length ? Object.keys(ch).map(k => `<button class="b" data-a="chapter" data-n="${k}">Load Act ${['', 'I', 'II', 'III', 'IV'][k] || k}</button>`).join('') : '<span class="note">None yet.</span>'}<span class="note">Admin games never write chapter saves.</span></div>`;
+        const ch = J().chapters(); h += `<h4>Chapter saves</h4><div class="row">${Object.keys(ch).length ? Object.keys(ch).map(k => `<button class="b" data-a="chapter" data-n="${k}">Load Chapter ${R[k] || k}</button>`).join('') : '<span class="note">None yet.</span>'}<span class="note">Admin games never write chapter saves.</span></div>`;
         h += `<h4>Pace log</h4><p class="note">Recorded in every game, admin or not: the day and silver when each objective was done. Copy it into a playtest issue.</p>${paceTable(s)}<div class="row"><button class="b" data-a="copypace">Copy the pace log</button></div>`;
       }
     }
@@ -178,29 +178,44 @@
   }
   function paceTable(s) {
     const L = s.paceLog || []; if (!L.length) return '<p class="note">Nothing yet.</p>';
-    return `<table><tr><th>Act</th><th>Objective</th><th>Day</th><th>Silver</th><th>Net worth</th></tr>${L.map(r => `<tr><td>${r.a}</td><td>${esc(r.t)}</td><td>${fmt(r.day)}</td><td>${fmt(r.coins)}</td><td>${fmt(r.nw)}</td></tr>`).join('')}</table>`;
+    return `<table><tr><th>Ch.</th><th>Objective</th><th>Day</th><th>Silver</th><th>Net worth</th></tr>${L.map(r => `<tr><td>${r.a}</td><td>${esc(r.t)}</td><td>${fmt(r.day)}</td><td>${fmt(r.coins)}</td><td>${fmt(r.nw)}</td></tr>`).join('')}</table>`;
   }
-  function paceText(s) { return (s.paceLog || []).map(r => `Act ${r.a} | ${r.t} | day ${Math.round(r.day)} | ${Math.round(r.coins)} silver | net worth ${Math.round(r.nw)}`).join('\n'); }
+  function paceText(s) { return (s.paceLog || []).map(r => `Chapter ${r.a} | ${r.t} | day ${Math.round(r.day)} | ${Math.round(r.coins)} silver | net worth ${Math.round(r.nw)}`).join('\n'); }
   function copy(t, what) { const done = () => toast(`${what} copied to the clipboard.`); try { navigator.clipboard.writeText(t).then(done, () => fallback()); } catch (e) { fallback(); } function fallback() { const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); done(); } catch (e) { } ta.remove(); } }
 
   // ---------------- actions ----------------
   function refresh(s) { if (!s) return; J().rebuildCaravan(); J().applyMount(); J().hud(); J().campCheck(); }
   function travel(id) { if (!H.W.cityById[id]) return; mark(); close(); H.placeAtCity(id); if (J() && J().resetTrail) J().resetTrail(); }
+  // v21: fill in each chapter's results and go to the next chapter's city
+  const CH_EV = {
+    1: { cine: 1, d11: 1, soldVen: 1, d12: 1, bought: 1, contract: 1, d13: 1, ambush: 1, fightA: 1, letter: 1, delivered: 1, d21: 1, d22: 1 },
+    2: { paidBahram: 1 }, 3: {}, 4: { paidRansom: 1, fightB: 1, d42: 1 },
+  };
+  function fillTo(s, n) { // state as if chapters 1 .. n-1 were played
+    s.camp.ev = s.camp.ev || {}; s.camp.done = s.camp.done || {};
+    for (let a = 1; a < n && a <= 4; a++) { Object.assign(s.camp.ev, CH_EV[a]); for (const st of J().stepsOf(a)) if (!st.live) s.camp.done[st.id] = 1;
+      if (a === 1) { s.cargo.matteoring = 1; s.cargo.griffinletter = 1; s.coins = Math.max(s.coins, 260) + 300; s.scuolaDebt = 300; delete s.cargo.muranoglass; delete s.cargo.scarlet; s.contracts = (s.contracts || []).filter(k => k.id !== 'story-linen'); for (const c of ['damascus', 'aleppo', 'constantinople']) if (!s.visited.includes(c)) s.visited.push(c); s.water = Math.max(s.water, 10); }
+      if (a === 2) { s.pack.mule = Math.max(1, s.pack.mule || 0); s.fodder = Math.max(s.fodder, 20); if (!s.visited.includes('tabriz')) s.visited.push('tabriz'); }
+      if (a === 3) { s.coins = Math.max(s.coins, 5200); if (!s.visited.includes('delhi')) s.visited.push('delhi'); } }
+    s.camp.act = Math.min(5, n); s.camp.base = s.visited.length; s.camp.startDay = s.day;
+  }
   function skipTo(n) {
-    const s = S(); if (!s || !s.camp) return; mark();
-    const ms = typeof MARKET !== 'undefined' ? MARKET_ORDER.filter(m => m !== MARKET.of('constantinople')).slice(0, 3) : [];
-    while (s.camp.act < n && s.camp.act < 4) {
-      const a = s.camp.act;
-      if (a === 1) { Object.assign(s.camp.ev, { talk_merchant: 1, contract: 1, bought: 1, food: 1, delivered: 1, profit: 1 }); s.coins = Math.max(s.coins, 300); for (const c of ['damascus', 'aleppo', 'constantinople']) if (!s.visited.includes(c)) s.visited.push(c); }
-      if (a === 2) { s.camp.ev.bailo = 1; delete s.cargo.bailoletter; s.rep = Math.min(100, s.rep + 10); s.pack.mule = Math.max(3, s.pack.mule || 0); s.camp.mk2 = Array.from(new Set((s.camp.mk2 || []).concat(ms))); s.coins = Math.max(s.coins, 1500); s.camp.ev.venture = 1; }
-      for (const st of J().stepsOf(a)) if (!st.live) s.camp.done[st.id] = 1;
-      if (a < 3) { s.camp.act = a + 1; s.camp.base = s.visited.length; s.camp.startDay = s.day; if (a + 1 === 2) s.water = Math.max(s.water, 10); }
-      else { s.won = true; s.paiza = true; s.camp.act = 4; s.camp.a4intro = 1; }
-    }
-    close();
-    const to = { 2: 'constantinople', 4: 'khanbaliq' }[n]; if (to) H.placeAtCity(to);
-    J().refreshVendors(); refresh(s); J().save();
-    setTimeout(() => J().showStory(n, 'Admin mode skipped ahead to this act.', n - 1), 400);
+    const s = S(); if (!s || !s.camp) return; mark(); close();
+    if (n < s.camp.act) { // going back: start a fresh story with the same apprentice, then fill forward
+      const keep = { hero: s.hero, seed: s.seed }; const fresh = JSON.parse(JSON.stringify(s)); Object.assign(s, { coins: 15, cargo: { muranoglass: 2, scarlet: 1 }, contracts: [], visited: ['acre'], pack: {}, veh: {}, hires: {}, scuolaDebt: 0 }); s.camp = { v21: true, act: 1, ev: { cine: 1 }, done: {}, hints: s.camp.hints || {}, arrows: 10 }; Object.assign(s, keep); void fresh; }
+    fillTo(s, n);
+    const to = { 1: 'acre', 2: 'constantinople', 3: 'tabriz', 4: 'delhi', 5: 'delhi' }[n]; if (to) H.placeAtCity(to);
+    if (n >= 5) { s.camp.act = 4; Object.assign(s.camp.ev, CH_EV[4]); s.coins += 0; J().refreshVendors(); refresh(s); J().save(); J().finish(); return; }
+    J().refreshVendors(); refresh(s); J().save(); J().rebuild();
+    setTimeout(() => J().showStory(n, 'Admin mode jumped to this chapter.', n > 1 ? n - 1 : 0), 400);
+  }
+  function scene(id) {
+    const s = S(); if (!s || !s.camp) return; mark(); close(); const st = window.__story; if (!st) return;
+    if (id === 'opening') { s.camp.act = 1; s.camp.ev.cine = 0; H.placeAtCity('acre'); st.opening(() => J().showStory(1)); return; }
+    if (id === 'ambush' || id === 'fightA') { if (s.camp.act !== 1 || s.camp.ev.ambush) { s.camp.act = 1; s.camp.ev = { cine: 1, d11: 1, soldVen: 1, d12: 1, bought: 1, contract: 1 }; s.camp.done = {}; }
+      Object.assign(s.camp.ev, { d13: 1 }); if (!s.visited.includes('damascus')) s.visited.push('damascus'); window.__game.placeOnEdge('damascus', 'aleppo', .4, 0); J().save();
+      if (id === 'ambush') st.ambush(); else { Object.assign(s.camp.ev, { ambush: 1 }); s.cargo.matteoring = 1; s.camp.arrows = 10; st.fightA(); } return; }
+    if (id === 'fightB') { fillTo(s, 4); s.camp.act = 4; H.placeAtCity('delhi'); s.camp.ev.paidRansom = 1; J().refreshVendors(); J().save(); st.fightB(); }
   }
   root.addEventListener('click', e => {
     const t = e.target.closest('[data-a]'); if (!t || t.disabled) return; const d = t.dataset; const s = S();
@@ -230,7 +245,8 @@
       case 'fac': mark(); J().facState()[d.f].s = +d.n; break;
       case 'facm': { mark(); const st = J().facState()[d.f]; st.m = !st.m; if (st.m) st.s = Math.max(st.s, 10); break; }
       case 'skipto': skipTo(+d.n); return;
-      case 'stepdone': { mark(); const st = J().stepsOf(s.camp.act).find(x => x.id === d.id); if (st) { s.camp.done[st.id] = 1; if (st.id === 'bailo') { s.camp.ev.bailo = 1; delete s.cargo.bailoletter; } J().campCheck(); J().updateTracker(); } if (J().ui === 'story') { close(); return; } break; }
+      case 'scene': scene(d.s); return;
+      case 'stepdone': { mark(); const st = J().stepsOf(s.camp.act).find(x => x.id === d.id); if (st) { s.camp.done[st.id] = 1; const evk = { talk1: 'd11', talk2: 'd12', talk3: 'd13', aleppo: 'ambush', riders: 'fightA', ghisi: 'd22', bahram: 'paidBahram', house: 'paidRansom', escape: 'fightB', matteo: 'd42' }[st.id]; if (evk) s.camp.ev[evk] = 1; if (st.id === 'ghisi' && !s.scuolaDebt) { s.coins += 300; s.scuolaDebt = 300; } J().campCheck(); J().updateTracker(); } if (J().ui === 'story') { close(); return; } break; }
       case 'audreq': { mark(); const nw = J().netWorth(); if (nw < 6100) s.coins += 6100 - nw; s.cargo.holyoil = Math.max(1, s.cargo.holyoil || 0); s.paiza = true; s.rep = Math.max(s.rep, 40); toast('You now meet every requirement for the audience.'); break; }
       case 'audwin': { mark(); const nw = J().netWorth(); if (nw < 6100) s.coins += 6100 - nw; s.cargo.holyoil = Math.max(1, s.cargo.holyoil || 0); s.paiza = true; close(); J().openUI('audience'); J().act('win', {}); return; }
       case 'chapter': { const ch = J().chapters()[d.n]; if (!ch) return; try { localStorage.setItem(J().SAVE_KEY, ch); location.reload(); } catch (e) { } return; }
@@ -259,7 +275,7 @@
     const s = S(); if (!s || !s.camp || !J()) return; const a = s.camp.act; if (a > 4) return;
     const L = s.paceLog = s.paceLog || []; const seen = new Set(L.map(r => r.a + ':' + r.id));
     const rec = (id, t) => { if (seen.has(a + ':' + id)) return; seen.add(a + ':' + id); L.push({ a, id, t, day: Math.round(s.day * 10) / 10, coins: Math.round(s.coins), nw: Math.round(J().netWorth()) }); };
-    rec('start', 'Act begins');
+    rec('start', 'Chapter begins');
     try { for (const st of J().stepsOf(a)) if (J().stepDone(st)) rec(st.id, typeof st.t === 'function' ? st.t() : st.t); } catch (e) { }
   }
 

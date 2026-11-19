@@ -1510,6 +1510,7 @@
     camera.position.set(player.x, player.y, player.z);
     camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
     if (HK.viewFrame) HK.viewFrame(dt || 0);
+    if (HK.cineCam) HK.cineCam(camera, dt || 0); // v21: the story's cutscenes take the camera
   }
   function jump() { if (player.jy > 0 || player.vy > 0 || (HK.frozen && HK.frozen()) || pauseOpen() || (HK.canJump && !HK.canJump())) return; player.vy = 5.6; player.jy = 0.001; }
   function autoDir() {
@@ -1533,7 +1534,7 @@
 
   // ---------- input ----------
   document.addEventListener('keydown', (e) => {
-    if (!started) return;
+    if (!started || window.__combatOn) return;
     if (pauseOpen()) { if (e.code === 'KeyP' || e.code === 'Escape') closePause(); return; }
     if (HK.keydown && HK.keydown(e)) { e.preventDefault(); return; }
     if (e.code === 'KeyP' && !mapOpen) { openPause(); return; }
@@ -1560,7 +1561,7 @@
   });
   window.addEventListener('mouseup', () => { dragLook = false; });
   document.addEventListener('mousemove', (e) => {
-    if (!started || mapOpen || (HK.uiOpen && HK.uiOpen())) return;
+    if (!started || mapOpen || window.__combatOn || (HK.uiOpen && HK.uiOpen())) return;
     let dx = 0, dy = 0;
     if (document.pointerLockElement === canvas) { dx = e.movementX; dy = e.movementY; }
     else if (dragLook) { dx = e.clientX - lastMX; dy = e.clientY - lastMY; lastMX = e.clientX; lastMY = e.clientY; }
@@ -1571,7 +1572,7 @@
   document.addEventListener('pointerlockchange', () => {
     const locked = document.pointerLockElement === canvas;
     if (locked) { $('pause').classList.remove('show'); pauseDismissed = false; }
-    else if (started && !mapOpen && pauseWanted && !pauseDismissed && !(HK.uiOpen && HK.uiOpen())) openPause();
+    else if (started && !mapOpen && pauseWanted && !pauseDismissed && !window.__combatOn && !(HK.uiOpen && HK.uiOpen())) openPause();
   });
   let pauseWanted = false, pauseDismissed = false;
   const pauseOpen = () => $('pause').classList.contains('show');
@@ -1994,7 +1995,7 @@
   Object.assign(HK, { scene, camera, renderer, player, keys, sites, W, B, objMat, vegMat, addCollider, resolveCollisions, showToast, showBanner, renderCross, updateTarget, tryLock,
     placeAtCity: id => { placeAtCity(id); currentCity = null; hudTimer = 0; for (const s of sites) if (Math.hypot(s.x - player.x, s.z - player.z) < 500 && !s.built) { if (s.gen) s.gen = null; buildSiteSync(s); } updateChunks(player.x, player.z, 0, 480); player.y = W.walkHeight(player.x, player.z) + EYE; },
     getCity: () => currentCity, getSelected: () => selected, clearSelected: () => { selected = null; player.auto = false; updateTarget(); }, visited, lin, CULTURE_GROUND, colliderRemove: c => { for (const a of colHash.values()) { const i = a.indexOf(c); if (i >= 0) a.splice(i, 1); } },
-    setPauseWanted: v => { pauseWanted = v; }, isMapOpen: () => mapOpen, toggleMap, openPause, setQuality });
+    setPauseWanted: v => { pauseWanted = v; }, isMapOpen: () => mapOpen, toggleMap, openPause, setQuality, setTime: v => GFX.setTime(v), getTime: () => GFX.getTime(), updateChunks: () => updateChunks(player.x, player.z, 0, 480), buildNear: r => { for (const s of sites) if (Math.hypot(s.x - player.x, s.z - player.z) < (r || 500) && !s.built) { if (s.gen) s.gen = null; buildSiteSync(s); } } });
   window.__game = { buildCityTest: (id) => { const s = sites.find(s => s.city && s.city.id === id); const t0 = performance.now(); const g = buildCitySite(s); let tris = 0; g.traverse(o => { if (o.geometry) tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; }); return { ms: performance.now() - t0, tris }; }, rendererInfo: () => renderer.info.render, scene, sim: (n, dt) => { for (let i = 0; i < n; i++) { updatePlayer(dt); updateHUD(dt); } }, state: () => ({ city: currentCity && currentCity.id, selected, auto: player.auto, visited: visited.size }), chooseRoad, startAuto, player, W, teleport, toggleMap, chunks, sites, keys,
     placeOnEdge: (a, b, t, look) => { const e = W.edges.find(e => (e.a === a && e.b === b) || (e.a === b && e.b === a)); const j = e.start + Math.round(t * (e.n - 1)); const P = W.P; player.x = P.X[j]; player.z = P.Z[j]; const k = Math.min(e.start + e.n - 1, j + 3); player.yaw = Math.atan2(-(P.X[k] - P.X[j]), -(P.Z[k] - P.Z[j])) + (look || 0); for (const s of sites) if (Math.hypot(s.x - player.x, s.z - player.z) < 600 && !s.built) { if (s.gen) s.gen = null; buildSiteSync(s); } updateChunks(player.x, player.z, 0, 480); player.y = W.walkHeight(player.x, player.z) + EYE; }, setStarted: () => { started = true; $('intro').classList.add('hide'); $('hud').classList.add('show'); } };
 

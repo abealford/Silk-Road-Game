@@ -8,13 +8,14 @@
   const KEY = 'silkroad_view_v1';
   let want3p = false; try { want3p = localStorage.getItem(KEY) === '3p'; } catch (e) { }
   let blend = 0; // 0 = first person, 1 = third person
-  let avatar = null, rider = null, mount = null, mountKind = null, lastX = 0, lastZ = 0, faceYaw = 0, camD = 4.6;
+  let heroKey = '', avatar = null, rider = null, mount = null, mountKind = null, lastX = 0, lastZ = 0, faceYaw = 0, camD = 4.6;
   const V = new THREE.Vector3();
 
   function build(kind) {
     const kit = H.lifeKit; if (!kit || !kit.makePerson) return;
     if (avatar) H.scene.remove(avatar);
-    avatar = new THREE.Group(); mount = null; rider = kit.makePerson('byz', 'rich', 0);
+    const hero = H.J && H.J.MODE === 'journey' && H.J.S && H.J.S.hero; heroKey = hero ? JSON.stringify(hero) : '';
+    avatar = new THREE.Group(); mount = null; rider = hero && window.HERO ? HERO.makeFigure(hero) : kit.makePerson('byz', 'rich', 0); // v21: your apprentice, as you made them
     if (kind && kind !== 'foot' && kit.AN[kind]) {
       mount = kit.makeAnimal(kind, false, 99); avatar.add(mount);
       const a = kit.AN[kind]; rider.position.y = a.leg + a.bh * (kind === 'camel' ? 1.05 : .78) - .55; rider.position.z = kind === 'camel' ? -.15 : -.05;
@@ -43,7 +44,8 @@
     blend += (target - blend) * (1 - Math.exp(-(dt || 0.016) * 6)); if (Math.abs(target - blend) < 0.002) blend = target;
     const W = H.W; const ground = W.walkHeight(p.x, p.z);
     const mk = mountNow();
-    if (blend > 0.001 && (!avatar || mk !== mountKind)) build(mk);
+    const hk = H.J && H.J.S && H.J.S.hero ? JSON.stringify(H.J.S.hero) : '';
+    if (blend > 0.001 && (!avatar || mk !== mountKind || hk !== heroKey)) build(mk);
     if (!avatar) return;
     avatar.visible = blend > 0.15;
     if (!avatar.visible) { lastX = p.x; lastZ = p.z; return; }

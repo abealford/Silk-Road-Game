@@ -376,7 +376,46 @@ def run_variant(name, seeds, detail=False, V=None, quiet=False):
         print(f"  per game (Acts II-III): trade {allp:.0f}, contracts {avg('contracts'):.0f}, running costs {avg('costs'):.0f}, tolls {avg('tolls'):.0f}, {avg('legs'):.0f} legs, {avg('km'):.0f} km")
     return r
 
+# ---------- v21: the new story's Chapters I-III (Acre -> Constantinople -> Tabriz -> Delhi) ----------
+def chapter_leg(E, seed, coins, day, start, goal, need, policy='greedy'):
+    """trade from `start` until holding `need` dirhams, then head for `goal` (still trading on the way); returns (day reached, coins)"""
+    rnd = random.Random(seed + hash(goal) % 997); T = Trader(E, rnd, coins, start, day)
+    dk = lambda x: CD[x][goal]; used = 1
+    while T.day < day + 3000:
+        T.shop(used)
+        if T.c == goal and T.coins >= need: return T.day, T.coins, T.log
+        if policy == 'greedy' and T.coins < need:
+            allowed = [d for d in CITIES if d != T.c and 100 <= CD[T.c][d] <= 2500]
+        else:
+            allowed = [d for d in CITIES if d != T.c and 100 <= CD[T.c][d] <= 2500 and (dk(d) < dk(T.c) - 150 or (dk(T.c) < 300 and dk(d) < 2500))]
+            if T.coins >= need: allowed = [d for d in allowed if dk(d) < dk(T.c)]
+        if not allowed: allowed = [min(CITIES, key=lambda x: dk(x) if x != T.c else 1e18)]
+        step = min((x for x, _ in adj[T.c]), key=dk)
+        used = T.leg(allowed, step)
+    return T.day, T.coins, T.log
+def one_story(args):
+    key, V, sd, pol = args
+    if key not in _E: _E[key] = Econ(V)
+    E = _E[key]
+    c1, d1 = act1(E, sd, every_stop=True)
+    c1 += 100 - 45            # v21: Matteo's purse at the ambush; less of your own silver at the start than Act I's 100
+    d2, c2, _ = chapter_leg(E, sd, c1 + 300, d1, 'constantinople', 'tabriz', 1500, pol)   # the Scuola's 300 loan
+    d3, c3, lg = chapter_leg(E, sd, c2 - 1500, d2, 'tabriz', 'delhi', 5000, pol)          # Bahram's fee
+    return c1, d1, d2, d3
+def run_story(name, seeds):
+    import multiprocessing as mp
+    V = VARIANTS[name]; q = lambda xs: f"{st.median(xs):5.0f} ({sorted(xs)[len(xs) // 10]:.0f}-{sorted(xs)[-1 - len(xs) // 10]:.0f})"
+    print(f"\n== v21 story pace, {name} economy ({seeds} seeds; median (10th-90th pct))")
+    for pol in ('greedy', 'eastward'):
+        with mp.Pool() as pool: rs = pool.map(one_story, [(name, V, sd, pol) for sd in range(seeds)])
+        print(f"  [{pol}] Ch I Constantinople day {q([r[1] for r in rs])} with {q([r[0] for r in rs])} dirhams | Ch II Tabriz with 1,500 day {q([r[2] for r in rs])} | Ch III Delhi with 5,000 day {q([r[3] for r in rs])}")
+    path = ['delhi']; 
+    while path[-1] != 'tabriz': path.append(PREV['tabriz'][path[-1]])
+    print('  shortest road Tabriz -> Delhi: ' + ' > '.join(reversed(path)) + f" ({CD['tabriz']['delhi']:.0f} km); realms: " + ' > '.join(dict.fromkeys(REALM[c] for c in reversed(path))))
+
 if __name__ == '__main__':
     a = sys.argv; seeds = int(a[a.index('--seeds') + 1]) if '--seeds' in a else 20
     names = [a[a.index('--v') + 1]] if '--v' in a else list(VARIANTS)
-    for n in names: run_variant(n, seeds, '--detail' in a)
+    if '--story' in a: run_story(names[0] if '--v' in a else 'recommended', seeds)
+    else:
+        for n in names: run_variant(n, seeds, '--detail' in a)
