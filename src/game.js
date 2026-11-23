@@ -49,7 +49,7 @@
         col = mix(col, col * vec3(0.82, 0.94, 1.22), uNight * 0.55);
         col = aces(col);
         float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
-        col = mix(vec3(l), col, 1.08 + uVal * 0.1 * (1.0 - uNight) - uNight * 0.18);
+        col = mix(vec3(l), col, 1.08 - uVal * 0.14 * (1.0 - uNight) - uNight * 0.18);
         col = mix(col, col * col * (3.0 - 2.0 * col), 0.3 + uVal * 0.12);
         col += uVal * (1.0 - uNight) * (vec3(0.02, 0.012, -0.01) * smoothstep(0.55, 1.0, l) + vec3(-0.015, 0.006, 0.018) * (1.0 - smoothstep(0.05, 0.4, l)));
         col += vec3(0.025, 0.012, -0.012) * smoothstep(0.45, 1.0, l) + vec3(-0.012, 0.004, 0.022) * (1.0 - smoothstep(0.0, 0.35, l));
@@ -157,7 +157,7 @@
         float px = h21(sq) * 0.75 + vn(sq * 0.31) * 0.25;
         diffuseColor.rgb *= 1.0 + (px - 0.5) * ${amp.toFixed(2)} * pf;
         float gq = clamp((diffuseColor.g - diffuseColor.b) * 4.0, 0.0, 1.0) * clamp((diffuseColor.g - diffuseColor.r * 0.8) * 6.0, 0.0, 1.0);
-        diffuseColor.rgb *= mix(vec3(1.0), vec3(0.64, 1.0, 0.74), gq * uVal); // olive and mustard greens become true greens
+        diffuseColor.rgb *= mix(vec3(1.0), vec3(0.86, 1.0, 0.88), gq * uVal); // olive and mustard greens become true greens
         float sl = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
         diffuseColor.rgb = max(mix(vec3(sl), diffuseColor.rgb, 1.0 + ${sat.toFixed(2)} * uVal), 0.0);
       }
@@ -235,7 +235,7 @@
         }
         diffuseColor.rgb = c;
       }`);
-    withStyle(sh, 5.0, 0.2, 0.1); withHaze(sh, 'vWPos'); withRim(sh, 0.12);
+    withStyle(sh, 5.0, 0.0, -0.06); withHaze(sh, 'vWPos'); withRim(sh, 0.12);
   };
   function makeObjMat(windows) {
     const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
@@ -251,7 +251,7 @@
         float course = an.y < 0.6 ? smoothstep(0.06, 0.0, abs(fract(vWPos.y * 2.2) - 0.5) - 0.44) : 0.0;
         diffuseColor.rgb *= mix(1.0, (0.9 + 0.18 * g) * (1.0 - 0.08 * course), fade);
       }`);
-      withStyle(sh, 8.0, 0.18, 0.1); withRim(sh, 0.16);
+      withStyle(sh, 8.0, 0.0, -0.06); withRim(sh, 0.16);
       if (windows) sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
       if (uNight > 0.01) { vec3 an2 = abs(vWNorm);
         if (an2.y < 0.2) { float u = an2.x > an2.z ? vWPos.z : vWPos.x; float yy = (vLocY - 0.7) / 2.8;
@@ -286,7 +286,7 @@
       float ph = time * 1.4 + position.x * 0.21 + position.z * 0.17;
       float gust = 0.6 + 0.8 * sin(time * 0.35 + position.x * 0.013 + position.z * 0.009);
       transformed.x += sin(ph) * 0.045 * aSway * gust; transformed.z += cos(ph * 0.83) * 0.034 * aSway * gust;`);
-    withStyle(sh, 6.0, 0.22, 0.22); withRim(sh, 0.22); withHaze(sh, 'vWPos');
+    withStyle(sh, 6.0, 0.0, -0.06); withRim(sh, 0.22); withHaze(sh, 'vWPos');
   };
   const roadMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 });
   roadMat.onBeforeCompile = (sh) => {
@@ -2222,7 +2222,7 @@
         if (sy > -0.04) sun.intensity *= 1 + 0.22 * V; hemi.intensity *= 1 - 0.22 * dayV;
         tC3.copy(su.zen.value); hemi.color.lerp(tC3, 0.12 * dayV);
         // a teal-blue sky and blue atmospheric haze that starts nearer, so distant hills layer into the sky
-        tC3.setRGB(0.2, 0.52, 0.86); su.zen.value.lerp(tC3, 0.6 * dayV * (1 - over));
+        tC3.setRGB(0.26, 0.52, 0.8); su.zen.value.lerp(tC3, 0.35 * dayV * (1 - over));
         tC3.setRGB(0.7, 0.85, 0.95); su.hor.value.lerp(tC3, 0.45 * dayV * (1 - over) * (1 - twi));
         tC3.copy(su.zen.value).lerp(su.hor.value, 0.55); scene.fog.color.lerp(tC3, 0.45 * dayV * (1 - over * 0.6));
         scene.fog.near *= 1 - 0.45 * V; scene.fog.far *= 1 - 0.15 * V;
@@ -2276,7 +2276,7 @@
           vWPos = (modelMatrix * wq).xyz; vWNorm = normalize(mat3(modelMatrix) * nq); }`);
     sh.fragmentShader = 'varying float vGlow; varying vec3 vWPos; varying vec3 vWNorm;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += diffuseColor.rgb * vGlow * (0.25 + uNight * 3.2);`);
-    withStyle(sh, 12.0, 0.16, 0.14); withRim(sh, 0.2); withHaze(sh, 'vWPos');
+    withStyle(sh, 12.0, 0.0, -0.06); withRim(sh, 0.2); withHaze(sh, 'vWPos');
   };
   // ---- geometry helpers: a Builder that also records the animation part of every vertex ----
   function Deco() { this.b = new B.Builder(); this.b.ao = false; this.b.jit = 0.03; this.part = []; this.anim = []; this.n = 0; }
@@ -2769,7 +2769,7 @@
         c = mix(c, mix(c, vec3(0.62, 0.55, 0.42), 0.6), uWinter * smoothstep(33.0, 42.0, lat));
         c = mix(c, vec3(0.92, 0.94, 0.98), uWinter * smoothstep(34.0, 43.0, lat) * smoothstep(0.5, 1.0, vH) * 0.7);
         float gq = clamp((c.g - c.b) * 4.0, 0.0, 1.0) * clamp((c.g - c.r * 0.8) * 6.0, 0.0, 1.0);
-        c *= mix(vec3(1.0), vec3(0.7, 1.0, 0.72), gq * uVal);
+        c *= mix(vec3(1.0), vec3(0.88, 1.0, 0.88), gq * uVal);
         diffuseColor.rgb = c; }`);
     withHaze(sh, 'vWPos');
   };
@@ -2847,7 +2847,7 @@
     sh.fragmentShader = 'varying vec3 vWPos; varying vec3 vWNorm;\n' + GLSL_NOISE + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       { float st = sin(vWPos.y * 2.4 + vn(vWPos.xz * 0.3) * 4.0) * 0.5 + 0.5; float g = vn(vWPos.xz * 2.0 + vWPos.y) * 0.5 + vn(vWPos.zy * 5.0) * 0.5;
         diffuseColor.rgb *= (0.86 + 0.14 * st) * (0.85 + 0.3 * g); diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.75, 0.85, 0.6), smoothstep(0.6, 0.95, vWNorm.y) * 0.35 * step(0.55, vn(vWPos.xz * 1.3))); }`);
-    withStyle(sh, 8.0, 0.22, 0.1); withRim(sh, 0.14); withHaze(sh, 'vWPos');
+    withStyle(sh, 8.0, 0.0, -0.06); withRim(sh, 0.14); withHaze(sh, 'vWPos');
   };
   rockMat.customProgramCacheKey = () => 'rock';
   function rockGeo(seed, kind) {
