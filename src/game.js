@@ -31,10 +31,10 @@
   const POST = renderer.capabilities.isWebGL2;
   let rt = null; const postScene = new THREE.Scene(), postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const postMat = new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: null }, tBloomA: { value: null }, tBloomB: { value: null }, uBloom: { value: 0 }, uShaft: { value: 0 }, uSun: { value: new THREE.Vector3(0.5, 0.5, 0) }, uAspect: { value: 1 }, uExposure: { value: 0.92 }, uNight: { value: 0 }, uWarm: { value: new THREE.Vector3(1, 1, 1) } },
+    uniforms: { tDiffuse: { value: null }, tBloomA: { value: null }, tBloomB: { value: null }, uBloom: { value: 0 }, uShaft: { value: 0 }, uSun: { value: new THREE.Vector3(0.5, 0.5, 0) }, uAspect: { value: 1 }, uExposure: { value: 0.92 }, uVal: { value: 1 }, uNight: { value: 0 }, uWarm: { value: new THREE.Vector3(1, 1, 1) } },
     depthTest: false, depthWrite: false,
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
-    fragmentShader: `uniform sampler2D tDiffuse; uniform sampler2D tBloomA; uniform sampler2D tBloomB; uniform float uBloom; uniform float uShaft; uniform vec3 uSun; uniform float uAspect; uniform float uExposure; uniform float uNight; varying vec2 vUv;
+    fragmentShader: `uniform sampler2D tDiffuse; uniform sampler2D tBloomA; uniform sampler2D tBloomB; uniform float uBloom; uniform float uShaft; uniform vec3 uSun; uniform float uAspect; uniform float uExposure; uniform float uNight; uniform float uVal; varying vec2 vUv;
       vec3 aces(vec3 x){ const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14; return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0); }
       void main(){
         vec3 col = texture2D(tDiffuse, vUv).rgb;
@@ -49,8 +49,9 @@
         col = mix(col, col * vec3(0.82, 0.94, 1.22), uNight * 0.55);
         col = aces(col);
         float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
-        col = mix(vec3(l), col, 1.08 - uNight * 0.18);
-        col = mix(col, col * col * (3.0 - 2.0 * col), 0.3);
+        col = mix(vec3(l), col, 1.08 + uVal * 0.1 * (1.0 - uNight) - uNight * 0.18);
+        col = mix(col, col * col * (3.0 - 2.0 * col), 0.3 + uVal * 0.12);
+        col += uVal * (1.0 - uNight) * (vec3(0.02, 0.012, -0.01) * smoothstep(0.55, 1.0, l) + vec3(-0.015, 0.006, 0.018) * (1.0 - smoothstep(0.05, 0.4, l)));
         col += vec3(0.025, 0.012, -0.012) * smoothstep(0.45, 1.0, l) + vec3(-0.012, 0.004, 0.022) * (1.0 - smoothstep(0.0, 0.35, l));
         vec2 q = vUv - 0.5; col *= 1.0 - dot(q, q) * (0.6 + uNight * 0.5);
         col = pow(max(col, 0.0), vec3(1.0 / 2.2));
@@ -140,6 +141,29 @@
   // ---------- v13 shared lighting: layered haze, rim light, night ----------
   const HAZE_U = { uHazeFar: { value: new THREE.Color(0xb0b8c8) }, uMist: { value: 0 }, uMistY: { value: 0 } };
   const RIM_U = { uRimCol: { value: new THREE.Color(0xffd9a0) }, uLDir: { value: SUN_DIR.clone() }, uNight: { value: 0 } };
+  // ---- v22 test: the Valheim look (STYLE_U.uVal 1 = Valheim, 0 = the classic v13 look) ----
+  let LOOK = 'valheim'; try { LOOK = localStorage.getItem('silkroad_look') || 'valheim'; } catch (e) { } if (LOOK !== 'classic') LOOK = 'valheim';
+  const STYLE_U = { uVal: { value: LOOK === 'valheim' ? 1 : 0 } };
+  function declVal(sh) { sh.uniforms.uVal = STYLE_U.uVal; if (sh.fragmentShader.indexOf('uniform float uVal;') < 0) sh.fragmentShader = 'uniform float uVal;\n' + sh.fragmentShader; }
+  // low-res "pixel" texture: world-space texels of tpm per metre, nearest-neighbour, faded out with distance to avoid shimmer; plus a saturation lift
+  function withStyle(sh, tpm, amp, sat) {
+    declVal(sh);
+    if (sh.fragmentShader.indexOf('float h21(') < 0) sh.fragmentShader = GLSL_NOISE + sh.fragmentShader;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <alphamap_fragment>', `
+      if (uVal > 0.0) {
+        float sdist = length(vWPos - cameraPosition); float pf = (1.0 - smoothstep(35.0, 150.0, sdist)) * uVal;
+        vec3 san = abs(vWNorm); vec2 suv = san.y > 0.6 ? vWPos.xz : (san.x > san.z ? vWPos.zy : vWPos.xy);
+        vec2 sq = floor(suv * ${tpm.toFixed(1)});
+        float px = h21(sq) * 0.75 + vn(sq * 0.31) * 0.25;
+        diffuseColor.rgb *= 1.0 + (px - 0.5) * ${amp.toFixed(2)} * pf;
+        float gq = clamp((diffuseColor.g - diffuseColor.b) * 4.0, 0.0, 1.0) * clamp((diffuseColor.g - diffuseColor.r * 0.8) * 6.0, 0.0, 1.0);
+        diffuseColor.rgb *= mix(vec3(1.0), vec3(0.64, 1.0, 0.74), gq * uVal); // olive and mustard greens become true greens
+        float sl = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+        diffuseColor.rgb = max(mix(vec3(sl), diffuseColor.rgb, 1.0 + ${sat.toFixed(2)} * uVal), 0.0);
+      }
+      #include <alphamap_fragment>`);
+  }
+  postMat.uniforms.uVal = STYLE_U.uVal;
   function withHaze(sh, wp) {
     Object.assign(sh.uniforms, HAZE_U);
     sh.fragmentShader = 'uniform vec3 uHazeFar; uniform float uMist; uniform float uMistY;\n' + sh.fragmentShader.replace('#include <fog_fragment>', `
@@ -151,11 +175,13 @@
         gl_FragColor.rgb = mix(gl_FragColor.rgb, fogC, ffog);
       #endif`);
   }
-  function withRim(sh, k) { // painterly rim light: strongest on silhouettes facing away from the sun/moon
+  function withRim(sh, k) { // painterly rim light: strongest on silhouettes facing away from the sun/moon (mostly off in the Valheim look)
+    declVal(sh);
     Object.assign(sh.uniforms, RIM_U);
     sh.fragmentShader = 'uniform vec3 uRimCol; uniform vec3 uLDir; uniform float uNight;\n' + sh.fragmentShader.replace('#include <opaque_fragment>', `
+
       { vec3 Vd = normalize(cameraPosition - vWPos); vec3 Nw = normalize(vWNorm); float fr = pow(1.0 - abs(dot(Nw, Vd)), 3.0);
-        float back = 0.3 + 0.7 * max(dot(-Vd, uLDir), 0.0); outgoingLight += uRimCol * fr * back * ${k.toFixed(2)} * diffuseColor.rgb * 2.0; }
+        float back = 0.3 + 0.7 * max(dot(-Vd, uLDir), 0.0); outgoingLight += uRimCol * fr * back * ${k.toFixed(2)} * (1.0 - 0.8 * uVal) * diffuseColor.rgb * 2.0; }
       #include <opaque_fragment>`);
   }
   const NIGHT_GLSL = 'uniform float uNight; uniform float time;\n';
@@ -209,7 +235,7 @@
         }
         diffuseColor.rgb = c;
       }`);
-    withHaze(sh, 'vWPos'); withRim(sh, 0.12);
+    withStyle(sh, 5.0, 0.2, 0.1); withHaze(sh, 'vWPos'); withRim(sh, 0.12);
   };
   function makeObjMat(windows) {
     const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
@@ -225,7 +251,7 @@
         float course = an.y < 0.6 ? smoothstep(0.06, 0.0, abs(fract(vWPos.y * 2.2) - 0.5) - 0.44) : 0.0;
         diffuseColor.rgb *= mix(1.0, (0.9 + 0.18 * g) * (1.0 - 0.08 * course), fade);
       }`);
-      withRim(sh, 0.16);
+      withStyle(sh, 8.0, 0.18, 0.1); withRim(sh, 0.16);
       if (windows) sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
       if (uNight > 0.01) { vec3 an2 = abs(vWNorm);
         if (an2.y < 0.2) { float u = an2.x > an2.z ? vWPos.z : vWPos.x; float yy = (vLocY - 0.7) / 2.8;
@@ -260,7 +286,7 @@
       float ph = time * 1.4 + position.x * 0.21 + position.z * 0.17;
       float gust = 0.6 + 0.8 * sin(time * 0.35 + position.x * 0.013 + position.z * 0.009);
       transformed.x += sin(ph) * 0.045 * aSway * gust; transformed.z += cos(ph * 0.83) * 0.034 * aSway * gust;`);
-    withRim(sh, 0.22); withHaze(sh, 'vWPos');
+    withStyle(sh, 6.0, 0.22, 0.22); withRim(sh, 0.22); withHaze(sh, 'vWPos');
   };
   const roadMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 });
   roadMat.onBeforeCompile = (sh) => {
@@ -1992,6 +2018,7 @@
   $('pm-no').onclick = () => $('pm-confirm').classList.remove('show');
   $('pm-yes').onclick = () => { $('pm-confirm').classList.remove('show'); if (HK.restart) HK.restart(); closePause(); };
   document.querySelectorAll('#pm-gfx button').forEach(b => b.onclick = () => setQuality(b.dataset.q));
+  document.querySelectorAll('#pm-look button').forEach(b => { b.onclick = () => GFX.setLook(b.dataset.look); b.classList.toggle('on', b.dataset.look === LOOK); });
   Object.assign(HK, { scene, camera, renderer, player, keys, sites, W, B, objMat, vegMat, addCollider, resolveCollisions, showToast, showBanner, renderCross, updateTarget, tryLock,
     placeAtCity: id => { placeAtCity(id); currentCity = null; hudTimer = 0; for (const s of sites) if (Math.hypot(s.x - player.x, s.z - player.z) < 500 && !s.built) { if (s.gen) s.gen = null; buildSiteSync(s); } updateChunks(player.x, player.z, 0, 480); player.y = W.walkHeight(player.x, player.z) + EYE; },
     getCity: () => currentCity, getSelected: () => selected, clearSelected: () => { selected = null; player.auto = false; updateTarget(); }, visited, lin, CULTURE_GROUND, colliderRemove: c => { for (const a of colHash.values()) { const i = a.indexOf(c); if (i >= 0) a.splice(i, 1); } },
@@ -2189,8 +2216,20 @@
     hemi.color.copy(palCur.hs).lerp(NIGHTP.hs, night); hemi.groundColor.copy(palCur.hg).lerp(NIGHTP.hg, night);
     if (twi > 0) { tC3.copy(SETC); hemi.color.lerp(tC3, twi * 0.25 * (1 - night)); }
     hemi.intensity = (1.75 - 0.95 * night) * (1 - twi * 0.15) * (1 + over * 0.15);
+    { const V = STYLE_U.uVal.value, dayV = V * (1 - night);
+      if (V > 0) {
+        // stronger sun against a dimmer, cooler sky fill: deeper, bluer shadows
+        if (sy > -0.04) sun.intensity *= 1 + 0.22 * V; hemi.intensity *= 1 - 0.22 * dayV;
+        tC3.copy(su.zen.value); hemi.color.lerp(tC3, 0.12 * dayV);
+        // a teal-blue sky and blue atmospheric haze that starts nearer, so distant hills layer into the sky
+        tC3.setRGB(0.2, 0.52, 0.86); su.zen.value.lerp(tC3, 0.6 * dayV * (1 - over));
+        tC3.setRGB(0.7, 0.85, 0.95); su.hor.value.lerp(tC3, 0.45 * dayV * (1 - over) * (1 - twi));
+        tC3.copy(su.zen.value).lerp(su.hor.value, 0.55); scene.fog.color.lerp(tC3, 0.45 * dayV * (1 - over * 0.6));
+        scene.fog.near *= 1 - 0.45 * V; scene.fog.far *= 1 - 0.15 * V;
+        HAZE_U.uHazeFar.value.copy(su.hor.value).lerp(su.zen.value, 0.5).lerp(scene.fog.color, 0.3 + over * 0.5);
+      } }
     // post, rim, water, stars, moon, clouds
-    postMat.uniforms.uExposure.value = 0.92 + night * 0.48; postMat.uniforms.uNight.value = night;
+    postMat.uniforms.uExposure.value = (0.92 + night * 0.48) * (1 + 0.05 * STYLE_U.uVal.value * (1 - night)); postMat.uniforms.uNight.value = night;
     RIM_U.uRimCol.value.copy(sun.color).multiplyScalar(Math.min(1.2, sun.intensity * 0.42)); RIM_U.uLDir.value.copy(GFX.lightDir); RIM_U.uNight.value = night;
     WATER_U.uZen.value.copy(su.zen.value).lerp(su.wxc.value, over); WATER_U.uHor.value.copy(su.hor.value).lerp(scene.fog.color, 0.3 + over * 0.5); WATER_U.uSunW.value.copy(GFX.lightDir); WATER_U.uSunC.value.copy(sun.color).multiplyScalar(sun.intensity * 0.5);
     starGeo.setDrawRange(0, Q.stars); starMat.uniforms.uNight.value = night * (1 - over); starMat.uniforms.uTime.value = performance.now() / 1000; starMat.uniforms.uPx.value = renderer.getPixelRatio();
@@ -2211,6 +2250,9 @@
   };
   GFX.siteBuilt = s => { if (GFX.onSite) GFX.onSite(s, true); };
   GFX.siteGone = s => { if (GFX.onSite) GFX.onSite(s, false); };
+  GFX.look = () => LOOK;
+  GFX.setLook = (name) => { LOOK = name === 'classic' ? 'classic' : 'valheim'; STYLE_U.uVal.value = LOOK === 'valheim' ? 1 : 0; try { localStorage.setItem('silkroad_look', LOOK); } catch (e) { }
+    if (GFX.regrowGrass) GFX.regrowGrass(); document.querySelectorAll('#pm-look button').forEach(b => b.classList.toggle('on', b.dataset.look === LOOK)); };
   window.__gfx = GFX;
 
   // ================= v13 LIFE: birds, herds, people at work, smoke, flags, lanterns, wheels, windmills, boats =================
@@ -2234,7 +2276,7 @@
           vWPos = (modelMatrix * wq).xyz; vWNorm = normalize(mat3(modelMatrix) * nq); }`);
     sh.fragmentShader = 'varying float vGlow; varying vec3 vWPos; varying vec3 vWNorm;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += diffuseColor.rgb * vGlow * (0.25 + uNight * 3.2);`);
-    withRim(sh, 0.2); withHaze(sh, 'vWPos');
+    withStyle(sh, 12.0, 0.16, 0.14); withRim(sh, 0.2); withHaze(sh, 'vWPos');
   };
   // ---- geometry helpers: a Builder that also records the animation part of every vertex ----
   function Deco() { this.b = new B.Builder(); this.b.ao = false; this.b.jit = 0.03; this.part = []; this.anim = []; this.n = 0; }
@@ -2707,11 +2749,12 @@
   GFX._agents = () => agents; GFX._boats = () => boats;
 
   // ================= v13 GROUND: swaying grass, reeds and flowers by the rivers, boulders, outcrops and cliffs =================
-  const GWIND = { uWind: { value: 1 }, uGR: { value: 60 } };
+  const GWIND = { uWind: { value: 1 }, uGR: { value: 60 }, uVal: STYLE_U.uVal };
   const grassMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
   grassMat.onBeforeCompile = (sh) => {
     sh.uniforms.time = waterUniforms.time; Object.assign(sh.uniforms, SEASON_U, GWIND);
-    sh.vertexShader = 'uniform float time; uniform float uWind; uniform float uGR; attribute float aH; varying vec3 vWPos; varying float vH;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    sh.vertexShader = 'uniform float time; uniform float uWind; uniform float uGR; uniform float uVal; attribute float aH; varying vec3 vWPos; varying float vH;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      transformed.y *= 1.0 + 0.35 * uVal; transformed.xz *= 1.0 + 0.15 * uVal;
       vec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
       float dcam = length(ip.xz - cameraPosition.xz); float fadeS = 1.0 - smoothstep(uGR * 0.72, uGR, dcam);
       transformed *= fadeS; vH = aH;
@@ -2719,12 +2762,14 @@
       float sw = (sin(ph) * 0.6 + sin(ph * 2.3 + 1.7) * 0.25) * gust * uWind * aH * aH;
       mat3 gim = mat3(instanceMatrix); float s2 = dot(gim[0], gim[0]); vec3 wv = vec3(0.17, 0.0, 0.11) * sw * 1.6 / s2; transformed += vec3(dot(gim[0], wv), dot(gim[1], wv), dot(gim[2], wv));`)
       .replace('#include <project_vertex>', '#include <project_vertex>\n vWPos = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = SEASON_GLSL + 'varying vec3 vWPos; varying float vH;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    sh.fragmentShader = SEASON_GLSL + 'uniform float uVal; varying vec3 vWPos; varying float vH;\n' + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       { float lat = 38.0 - vWPos.z / uK; vec3 c = diffuseColor.rgb;
         c = mix(c, c * vec3(1.25, 1.0, 0.55), uAutumn * 0.7 * smoothstep(30.0, 42.0, lat));
         c = mix(c, c * vec3(1.18, 1.05, 0.7), uSummer * 0.4 * smoothstep(24.0, 40.0, lat));
         c = mix(c, mix(c, vec3(0.62, 0.55, 0.42), 0.6), uWinter * smoothstep(33.0, 42.0, lat));
         c = mix(c, vec3(0.92, 0.94, 0.98), uWinter * smoothstep(34.0, 43.0, lat) * smoothstep(0.5, 1.0, vH) * 0.7);
+        float gq = clamp((c.g - c.b) * 4.0, 0.0, 1.0) * clamp((c.g - c.r * 0.8) * 6.0, 0.0, 1.0);
+        c *= mix(vec3(1.0), vec3(0.7, 1.0, 0.72), gq * uVal);
         diffuseColor.rgb = c; }`);
     withHaze(sh, 'vWPos');
   };
@@ -2762,7 +2807,7 @@
     if (Math.abs(H[0] - H[8]) > 5 || Math.abs(H[2] - H[6]) > 5) dens *= 0.3; // cliffs stay bare
     const sw = seasonWeights(HK.seasonMonth ? HK.seasonMonth() : 6.3); const flowerK = (sw.sp + sw.s * .55 + sw.a * .1) * (lush || nearR ? 1 : .35);
     const gb = [lin(W.bio.gr[bi] * .85), lin(W.bio.gg[bi] * .9), lin(W.bio.gb[bi] * .75)];
-    const n = Math.round(26 * dens * Q.grass + (nearR ? 8 : 0)); const r = W.rng(cx * 92821 + cz * 68917);
+    const n = Math.round(26 * dens * Q.grass * (1 + 0.5 * STYLE_U.uVal.value) + (nearR ? 8 : 0)); const r = W.rng(cx * 92821 + cz * 68917);
     for (let k = 0; k < n; k++) {
       const fx = r(), fz = r(); const x = x0 + fx * GC, z = z0 + fz * GC;
       if (nearRoad && W.pathQuery(x, z).d < 3.6) continue;
@@ -2783,6 +2828,7 @@
       m.count = n; m.visible = n > 0; m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true; }
   }
   let gT = 0, gLastSeason = -1;
+  GFX.regrowGrass = () => { gcells.clear(); gDirty = true; };
   function updateGrass(px, pz, dt) {
     const R = 26 + 44 * Q.grass; GWIND.uGR.value = R; const pcx = Math.floor(px / GC), pcz = Math.floor(pz / GC), n = Math.ceil(R / GC); const t0 = performance.now();
     const sm = Math.round((HK.seasonMonth ? HK.seasonMonth() : 6.3) * 2); if (sm !== gLastSeason) { gLastSeason = sm; gcells.clear(); }
@@ -2801,7 +2847,7 @@
     sh.fragmentShader = 'varying vec3 vWPos; varying vec3 vWNorm;\n' + GLSL_NOISE + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
       { float st = sin(vWPos.y * 2.4 + vn(vWPos.xz * 0.3) * 4.0) * 0.5 + 0.5; float g = vn(vWPos.xz * 2.0 + vWPos.y) * 0.5 + vn(vWPos.zy * 5.0) * 0.5;
         diffuseColor.rgb *= (0.86 + 0.14 * st) * (0.85 + 0.3 * g); diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.75, 0.85, 0.6), smoothstep(0.6, 0.95, vWNorm.y) * 0.35 * step(0.55, vn(vWPos.xz * 1.3))); }`);
-    withRim(sh, 0.14); withHaze(sh, 'vWPos');
+    withStyle(sh, 8.0, 0.22, 0.1); withRim(sh, 0.14); withHaze(sh, 'vWPos');
   };
   rockMat.customProgramCacheKey = () => 'rock';
   function rockGeo(seed, kind) {
