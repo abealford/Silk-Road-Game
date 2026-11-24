@@ -4,10 +4,10 @@
   const card = document.querySelector('#intro .card'); if (!card) return;
   card.querySelector('.eyebrow').textContent = 'LAYOUT TEST · NOT THE GAME';
   card.querySelector('h1').textContent = 'Constantinople';
-  card.querySelector('.sub').textContent = 'The new town square: the market, the blacksmith, the Venetian Quarter, the tavern and the stables';
+  card.querySelector('.sub').textContent = 'The new town square in every city: the market, the blacksmith, the tavern and the stables, and in cities the Venetian Quarter';
   for (const b of document.querySelectorAll('.modebtn')) if (b.dataset.mode !== 'free') b.style.display = 'none';
   const free = document.querySelector('.modebtn[data-mode="free"]');
-  if (free) free.innerHTML = '<b>Enter the square</b><small>Free Roam, starting on the Mese at the edge of the square. NPCs are placed but E does nothing yet. Nothing here saves to your real game.</small>';
+  if (free) free.innerHTML = '<b>Enter the square</b><small>Free Roam, starting in Constantinople. Press M and click any city to go there. NPCs are placed but E does nothing yet. Nothing here saves to your real game.</small>';
   if ($('startbtn')) $('startbtn').style.display = 'none';
 
   const H = window.HOOKS; const orig = H.start;
@@ -27,5 +27,5 @@
     };
     setTimeout(put, 700);
   };
-  window.__sqdemo = { goto: (u, v, lookU, lookV) => { const G = window.__game, c = G.W.cityById.constantinople, k = c.squareKit, p = G.player; const [x, z] = k.toWorld(u, v); p.x = x; p.z = z; p.y = G.W.walkHeight(x, z) + 1.7; if (lookU !== undefined) { const [lx, lz] = k.toWorld(lookU, lookV); p.yaw = Math.atan2(-(lx - x), -(lz - z)); } return [x, z]; } };
+  window.__sqdemo = { goto: (u, v, lookU, lookV, id) => { const G = window.__game, c = G.W.cityById[id || 'constantinople'], k = c.squareKit, p = G.player; const [x, z] = k.toWorld(u, v); p.x = x; p.z = z; p.y = G.W.walkHeight(x, z) + 1.7; if (lookU !== undefined) { const [lx, lz] = k.toWorld(lookU, lookV); p.yaw = Math.atan2(-(lx - x), -(lz - z)); } return [x, z]; } };
 })();
