@@ -1198,16 +1198,20 @@
     // TEST (square kit): the redesigned town square, Constantinople only
     const KIT = window.SQUARE_KIT && window.SQUARE_KIT.has(city) ? window.SQUARE_KIT : null;
     const KL = KIT ? KIT.layout(city) : null;   // which way the square faces: away from the roads, inside the walls
-    const kTh = KIT ? KIT.plan(KL, theta, mainLines.map(pts => ({ pts: pts.filter(p => Math.hypot(p[0], p[1]) < R + 6), hw: style === 'grid' ? 3.6 : 3.0 })).concat(style === 'grid' ? [{ pts: [[0, -half - 4], [0, half + 4]], hw: 3.6 }, { pts: [[-half - 4, 0], [half + 4, 0]], hw: 3.6 }] : []), inside, style === 'grid') : theta;
+    // towns: planned now, before the landmarks. Cities: planned after the landmarks, so the rest of the city stays as it was
+    const early = !!(KIT && KL.town);
+    const kitLines = () => mainLines.map(pts => ({ pts: pts.filter(p => Math.hypot(p[0], p[1]) < R + 6), hw: style === 'grid' ? 3.6 : 3.0 })).concat(style === 'grid' ? [{ pts: [[0, -half - 4], [0, half + 4]], hw: 3.6 }, { pts: [[-half - 4, 0], [half + 4, 0]], hw: 3.6 }] : []);
+    let kTh = early ? KIT.plan(KL, theta, kitLines(), inside, style === 'grid') : theta;
     const kitUV = (x, z) => [x * Math.cos(kTh) + z * Math.sin(kTh), -x * Math.sin(kTh) + z * Math.cos(kTh)];
     const kitXZ = (u, v) => [u * Math.cos(kTh) - v * Math.sin(kTh), u * Math.sin(kTh) + v * Math.cos(kTh)];
-    const kitSplit = pts => KIT ? KIT.split(pts, KL, kitUV) : [pts];
+    const kitSplit = pts => early ? KIT.split(pts, KL, kitUV) : [pts];
     // 1. caravan roads become the main streets
     for (const l of mainLines) for (const sg of kitSplit(l.filter(p => Math.hypot(p[0], p[1]) < R + 6))) addStreet(sg, style === 'grid' ? 3.6 : 3.0, 'main', false);
     // 2. primary civic spaces
     const paved = []; // {x,z,w,d,ry}
     const plaza = (x, z, w, d, ry) => { paved.push({ x, z, w, d, ry }); occ.rect(x, z, w, d, ry, 1); };
-    if (KIT) {
+    const snap1 = KIT && !early ? occ.cells.slice() : null;
+    if (early) {
       if (style === 'grid') for (const [ax, az, bx, bz] of [[0, -half - 4, 0, half + 4], [-half - 4, 0, half + 4, 0]]) for (const sg of kitSplit([[ax, az], [bx, bz]])) addStreet(sg, 3.6, 'avenue', false);
       plaza(0, 0, KL.SQ.u1 - KL.SQ.u0, KL.SQ.v1 - KL.SQ.v0, -kTh); for (const Q of KL.PAVE) plaza(...kitXZ(Q.cu, Q.cv), Q.w, Q.d, -kTh + Q.r); for (const Q of KL.RESERVE) occ.rect(...kitXZ(Q.cu, Q.cv), Q.w, Q.d, -kTh + Q.r, 2);
     } else if (style === 'grid') {
@@ -1216,8 +1220,9 @@
     } else if (style === 'islamic') { const s = tier >= 3 ? [30, 20] : tier >= 2 ? [20, 14] : [12, 10]; plaza(0, 0, s[0], s[1], -theta); }
     else if (style === 'byz') { const s = tier >= 3 ? 26 : 16; plaza(0, 0, s, s, -theta); }
     else plaza(0, 0, 14, 14, 0);
-    if (KIT) KIT.build({ city, group, theta: kTh, L: KL, scul, wallSurf: SURF.WALL[scul], firstBuild, addCollider, B, objMat, bldMat, rng: W.rng(1272 + W.cities.indexOf(city)) });
+    if (early) KIT.build({ city, group, theta: kTh, L: KL, scul, wallSurf: SURF.WALL[scul], firstBuild, addCollider, B, objMat, bldMat, rng: W.rng(1272 + W.cities.indexOf(city)) });
     else occ.circle(0, 0, 8, 1);
+    const snap2 = snap1 ? occ.cells.slice() : null;
     yield;
     // 3. landmarks
     const gateAngs = city.gates.map(g => g.ang);
@@ -1261,7 +1266,16 @@
       yield;
     }
     // processional way to the main monument
-    if (mainLm && !KIT) { const dl = Math.hypot(mainLm.x, mainLm.z); if (dl > mainLm.r + 6) { const e2 = (dl - mainLm.r - 1.5) / dl; addStreet([[0, 0], [mainLm.x * e2, mainLm.z * e2]], 2.8, 'avenue', false); } }
+    if (KIT && !early) {
+      // the city's own plaza only kept the landmarks off the middle: give that space back to the houses, then lay the compact centre
+      const C = occ.cells; for (let i = 0; i < C.length; i++) if (snap1[i] === 0 && snap2[i] === 1 && C[i] === 1) C[i] = 0;
+      paved.length = 0;
+      const lines = kitLines(); if (mainLm) { const dl = Math.hypot(mainLm.x, mainLm.z); if (dl > mainLm.r + 6) { const e2 = (dl - mainLm.r - 1.5) / dl; lines.push({ pts: [[0, 0], [mainLm.x * e2, mainLm.z * e2]], hw: 2.8 }); } }
+      kTh = KIT.plan(KL, theta, lines, inside, style === 'grid', (x, z) => occ.get(x, z) !== 2);
+      plaza(0, 0, KL.SQ.u1 - KL.SQ.u0, KL.SQ.v1 - KL.SQ.v0, -kTh); for (const Q of KL.PAVE) plaza(...kitXZ(Q.cu, Q.cv), Q.w, Q.d, -kTh + Q.r); for (const Q of KL.RESERVE) occ.rect(...kitXZ(Q.cu, Q.cv), Q.w, Q.d, -kTh + Q.r, 2);
+      KIT.build({ city, group, theta: kTh, L: KL, scul, wallSurf: SURF.WALL[scul], firstBuild, addCollider, B, objMat, bldMat, rng: W.rng(1272 + W.cities.indexOf(city)) });
+    }
+    if (mainLm && !early) { const dl = Math.hypot(mainLm.x, mainLm.z); if (dl > mainLm.r + 6) { const e2 = (dl - mainLm.r - 1.5) / dl; addStreet([[0, 0], [mainLm.x * e2, mainLm.z * e2]], 2.8, 'avenue', false); } }
     // 4. street networks
     let canalX = null;
     if (style === 'grid') {
@@ -2791,7 +2805,7 @@
               d.add(b => { if (redL) { b.sphere(hx, ly, hz, .26, lc, 7, 1.15); b.cyl(hx, ly + .24, hz, .1, .1, .06, 0x2a2018, 6); b.cyl(hx, ly - .34, hz, .1, .1, .06, 0x2a2018, 6); } else { b.box(hx, ly - .25, hz, .3, .42, .3, lc); b.cone(hx, ly + .17, hz, .22, .18, 0x5a4a30, 4); } }, [6, hx, 2.85, hz], [hx + hz, 1]);
               light(hx, ly - .05, hz, redL ? REDL : LAMP, 1.3); } }
           const dc = Math.hypot(P[i][0], P[i][1]);
-          if ((st.kind === 'main' || st.kind === 'bazaar' || st.kind === 'avenue') && dc < c.R * .62 && dc > 9 && stalls < stallMax && r() < .45) {
+          if ((st.kind === 'main' || st.kind === 'bazaar' || st.kind === 'avenue') && dc < c.R * .62 && dc > (c.squareKit ? 28 : 9) && stalls < stallMax && r() < .45) {
             const sd = r() < .5 ? 1 : -1; const sx = P[i][0] + nx * sd * (hw - .9), sz = P[i][1] + nz * sd * (hw - .9); const ang = Math.atan2(dx, dz); const ca = Math.cos(ang), sa = Math.sin(ang);
             const loc = (u, v) => [sx + sa * u + nx * sd * v, sz + ca * u + nz * sd * v];
             const ac = awn[Math.floor(r() * awn.length)], ac2 = r() < .5 ? 0xf0e6c8 : ac;
