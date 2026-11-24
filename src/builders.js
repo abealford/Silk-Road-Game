@@ -41,7 +41,10 @@ const BLD = (() => {
   }
 
   class Builder {
-    constructor() { this.pos = []; this.col = []; this.stack = []; this.cur = new M4(); this.jit = 0.04; this.rng = Math.random; this._m = new M4(); this._v = new V3(); this.ao = true; }
+    constructor() { this.pos = []; this.col = []; this.stack = []; this.cur = new M4(); this.jit = 0.04; this.rng = Math.random; this._m = new M4(); this._v = new V3(); this.ao = true; this.surf = null; this.sr = []; }
+    // v22.2: the wall material (a SURF build layer name) for what is added next; null = untextured
+    setSurf(w) { this.surf = w; this._mark(); return this; }
+    _mark() { const n = this.pos.length / 3, L = this.sr, last = L[L.length - 1]; if (last && last[1] === this.surf) return; if (last && last[0] === n) last[1] = this.surf; else L.push([n, this.surf]); }
     push(x, y, z, ry = 0, s = 1) {
       this.stack.push(this.cur.clone());
       const m = new M4().compose(new V3(x, y, z), new Q().setFromAxisAngle(UP, ry), new V3(s, s, s));
@@ -50,6 +53,7 @@ const BLD = (() => {
     pushM(m) { this.stack.push(this.cur.clone()); this.cur.multiply(m); }
     pop() { this.cur = this.stack.pop(); }
     add(arr, m, c, ao) {
+      if (this.surf !== (this.sr.length ? this.sr[this.sr.length - 1][1] : null)) this._mark();
       const full = this._m.multiplyMatrices(this.cur, m); const e = full.elements; const cc = col(c);
       const j = 1 + (this.rng() - 0.5) * 2 * this.jit; const r = cc[0] * j, g = cc[1] * j, b = cc[2] * j;
       const P = this.pos, C = this.col; const sy = m.elements[5];
@@ -83,6 +87,7 @@ const BLD = (() => {
     }
     pyramid(x, y, z, w, h, c, ry = 0) { this.add(T('pyr', () => new THREE.ConeGeometry(Math.SQRT1_2, 1, 4).rotateY(Math.PI / 4).translate(0, .5, 0)), this.mat(x, y, z, w, h, w, ry), c); }
     tri(a, b, c, ca, cb, cc) {
+      if (this.surf !== (this.sr.length ? this.sr[this.sr.length - 1][1] : null)) this._mark();
       const e = this.cur.elements; const P = this.pos, Cl = this.col;
       for (const [v, k] of [[a, ca], [b, cb], [c, cc]]) {
         const x = v[0], y = v[1], z = v[2];
@@ -94,8 +99,28 @@ const BLD = (() => {
       const g = new THREE.BufferGeometry(); { const P = this.pos; for (let i = 0; i < P.length; i++) if (P[i] !== P[i]) P[i] = 0; }
       g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
       g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+      if (this.sr.some(r => r[1])) g.setAttribute('aSurf', new THREE.Float32BufferAttribute(this.surfAttr(), 3));
       g.computeVertexNormals(); g.computeBoundingSphere();
       return g;
+    }
+    // v22.2: per face (u, v, layer + 1) in metres. Walls: u runs level along the face, v down it; flat faces use x, z.
+    surfAttr() {
+      const P = this.pos, C = this.col, nv = P.length / 3, out = new Float32Array(nv * 3), L = this.sr; let ri = 0;
+      for (let t = 0; t + 2 < nv; t += 3) {
+        while (ri + 1 < L.length && L[ri + 1][0] <= t) ri++;
+        const w = L[ri] && L[ri][0] <= t ? L[ri][1] : null; if (!w) continue;
+        const a = t * 3, b = a + 3, c = a + 6;
+        const e1x = P[b] - P[a], e1y = P[b + 1] - P[a + 1], e1z = P[b + 2] - P[a + 2], e2x = P[c] - P[a], e2y = P[c + 1] - P[a + 1], e2z = P[c + 2] - P[a + 2];
+        let nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x; const nl = Math.hypot(nx, ny, nz); if (!(nl > 1e-9)) continue;
+        nx /= nl; ny /= nl; nz /= nl;
+        const r = Math.max(C[a], C[b], C[c]), g = Math.max(C[a + 1], C[b + 1], C[c + 1]), bb = Math.max(C[a + 2], C[b + 2], C[c + 2]);
+        const layer = SURF.buildLayer(r, g, bb, ny, w); if (!layer) continue;
+        let tx = 1, tz = 0, bx = 0, by = 0, bz = 1, flat = Math.abs(ny) >= 0.97;
+        if (!flat) { const tl = Math.hypot(nz, nx); tx = nz / tl; tz = -nx / tl; bx = ny * tz; by = nz * tx - nx * tz; bz = -ny * tx; } // t = up x n, b = n x t
+        for (let k = 0; k < 3; k++) { const o = a + k * 3, x = P[o], y = P[o + 1], z = P[o + 2];
+          out[o] = x * tx + z * tz; out[o + 1] = flat ? z : -(x * bx + y * by + z * bz); out[o + 2] = layer; }
+      }
+      return out;
     }
     get empty() { return this.pos.length === 0; }
   }

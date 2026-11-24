@@ -91,7 +91,7 @@
   .pm button:hover { background:#fff7e4; } .pm .pm-main { background:linear-gradient(#b94a2c, #8e2c18); color:#fbeed5; border-color:#5d1d10; }
   .pm .jr { display:none; } body.journey .pm .jr { display:block; }
   #pm-gfx { display:flex; align-items:center; gap:6px; margin:12px 0 6px; } #pm-gfx span { font-family:"Cinzel"; font-size:13px; margin-right:4px; } #pm-gfx button { margin:0; padding:6px 4px; font-size:13px; } #pm-gfx button.on { background:#3d2a18; color:#f6eacd; }
-  #pm-look { display:flex; align-items:center; gap:6px; margin:6px 0; } #pm-look span { font-family:"Cinzel"; font-size:13px; margin-right:4px; } #pm-look button { margin:0; padding:6px 4px; font-size:13px; } #pm-look button.on { background:#3d2a18; color:#f6eacd; }
+  #pm-look, #pm-surf { display:flex; align-items:center; gap:6px; margin:6px 0; } #pm-look span, #pm-surf span { font-family:"Cinzel"; font-size:13px; margin-right:4px; } #pm-look button, #pm-surf button { margin:0; padding:6px 4px; font-size:13px; } #pm-look button.on, #pm-surf button.on { background:#3d2a18; color:#f6eacd; }
   #pm-confirm { display:none; background:rgba(176,40,26,.08); border:1px solid rgba(176,40,26,.4); padding:8px 10px; margin:6px 0; } #pm-confirm.show { display:block; } #pm-confirm p { margin:4px 0 6px; font-size:15px; }
   #pm-confirm button { display:inline-block; width:auto; padding:6px 14px; margin:3px; } #pm-yes { background:#8e2c18 !important; color:#fbeed5 !important; }
   .pm-keys { font-size:13.5px; color:#6a4a2a; margin-top:10px; } .pm-keys b { font-family:"Cinzel"; }

@@ -26,6 +26,8 @@
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.pr));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // v22.2: ground and building textures (normal maps from Medium up)
+  { let on = true; try { on = localStorage.getItem('silkroad_surf') !== '0'; } catch (e) { } SURF.set(on, qName !== 'low'); } SURF.load(renderer, { aniso: qName === 'low' ? 2 : qName === 'medium' ? 4 : 8 });
   const scene = new THREE.Scene();
   // ---- post-processing: filmic tone mapping, grading, vignette (WebGL2 + MSAA) ----
   const POST = renderer.capabilities.isWebGL2;
@@ -188,7 +190,11 @@
   const terrainMat = new THREE.MeshLambertMaterial({ vertexColors: true });
   terrainMat.onBeforeCompile = (sh) => {
     withWorldVaryings(sh); Object.assign(sh.uniforms, SEASON_U); sh.fragmentShader = SEASON_GLSL + sh.fragmentShader;
-    sh.fragmentShader = sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    declVal(sh); SURF.inject(sh);
+    sh.vertexShader = 'attribute vec4 aGW; varying vec4 vGW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vGW = aGW;');
+    sh.fragmentShader = 'varying vec4 vGW;\n' + sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      if (gtv > 0.0 && surfN.y > -2.0) normal = normalize((viewMatrix * vec4(surfN, 0.0)).xyz);`).replace('#include <color_fragment>', `#include <color_fragment>
+      float gtv = uGT * uVal; vec3 surfN = vec3(0.0, -9.0, 0.0);
       {
         vec2 wp = vWPos.xz; float dist = length(vWPos - cameraPosition);
         float fade = 1.0 - smoothstep(50.0, 240.0, dist);
@@ -196,16 +202,50 @@
         float n1 = vn(wp * 0.9), n2 = vn(wp * 3.7);
         float slope = 1.0 - clamp(vWNorm.y, 0.0, 1.0);
         vec3 c = diffuseColor.rgb;
+        // v22.2: real ground textures (see src/surfaces.js), blended by the per-vertex weights, rock by slope
+        vec2 gdx = dFdx(wp), gdy = dFdy(wp); vec2 rdxa = dFdx(vWPos.zy), rdya = dFdy(vWPos.zy), rdxb = dFdx(vWPos.xy), rdyb = dFdy(vWPos.xy);
+        if (gtv > 0.0) {
+          float rockW = smoothstep(0.12, 0.34, slope);
+          float wE = max(0.0, 1.0 - vGW.x - vGW.y - vGW.z - vGW.w);
+          float ws[6]; ws[0] = vGW.x; ws[1] = vGW.y; ws[2] = vGW.z; ws[3] = wE; ws[4] = vGW.w;
+          for (int i = 0; i < 5; i++) ws[i] *= 1.0 - rockW;
+          ws[5] = rockW;
+          float mk = smoothstep(0.3, 0.7, vn(wp * 0.045)) * 0.55;  // a second, larger and turned sample hides the tiling
+          mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
+          float nf = (1.0 - smoothstep(35.0, 150.0, dist)) * uSN;
+          vec3 acc = vec3(0.0), nOff = vec3(0.0); float tot = 0.0;
+          for (int i = 0; i < 5; i++) {
+            float w = ws[i]; if (w < 0.015) continue;
+            vec4 P = uGP[i]; vec2 uv = wp * P.x; vec2 dx = gdx * P.x, dy = gdy * P.x; float Li = float(i);
+            vec3 t = textureGrad(tGround, vec3(uv, Li), dx, dy).rgb;
+            vec3 t2 = textureGrad(tGround, vec3(rot * uv * 0.37 + 0.31, Li), rot * dx * 0.37, rot * dy * 0.37).rgb;
+            t = mix(t, t2, mk);
+            acc += surfDet(c, t, uGM[i], P) * w; tot += w;
+            if (nf > 0.0) { vec3 nt = textureGrad(tGroundN, vec3(uv, Li), dx, dy).xyz * 2.0 - 1.0; nOff += vec3(nt.x, 0.0, -nt.y) * w; }
+          }
+          if (ws[5] > 0.015) {
+            vec4 P = uGP[5]; vec3 an = abs(vWNorm); float bx = an.x / max(an.x + an.z, 1e-3);
+            vec3 ta = textureGrad(tGround, vec3(vWPos.zy * P.x, 5.0), rdxa * P.x, rdya * P.x).rgb;
+            vec3 tb = textureGrad(tGround, vec3(vWPos.xy * P.x, 5.0), rdxb * P.x, rdyb * P.x).rgb;
+            acc += surfDet(c, mix(tb, ta, bx), uGM[5], P) * ws[5]; tot += ws[5];
+            if (nf > 0.0) { vec3 na = textureGrad(tGroundN, vec3(vWPos.zy * P.x, 5.0), rdxa * P.x, rdya * P.x).xyz * 2.0 - 1.0;
+              vec3 nb = textureGrad(tGroundN, vec3(vWPos.xy * P.x, 5.0), rdxb * P.x, rdyb * P.x).xyz * 2.0 - 1.0;
+              nOff += (vec3(0.0, -na.y, na.x) * bx + vec3(nb.x, -nb.y, 0.0) * (1.0 - bx)) * ws[5] * 1.6; }
+          }
+          c = mix(c, acc / max(tot, 1e-4), gtv);
+          vec3 Nw = normalize(vWNorm); surfN = normalize(Nw + (nOff - Nw * dot(Nw, nOff)) * nf * 1.3);
+        }
+        float pg = 1.0 - gtv; // the old procedural detail steps aside where the textures are on
         c *= 0.88 + 0.24 * n3;
-        c *= mix(1.0, 0.84 + 0.3 * (n2 * 0.6 + n1 * 0.4), fade);
+        c *= mix(1.0, 0.84 + 0.3 * (n2 * 0.6 + n1 * 0.4), fade * mix(1.0, 0.35, gtv));
         float strata = sin(vWPos.y * 0.9 + vn(wp * 0.08) * 9.0) * 0.5 + 0.5;
         float cracks = smoothstep(0.08, 0.0, abs(vn(vec2(wp.x * 0.35 + vWPos.y * 0.5, wp.y * 0.35)) - 0.5));
         float steep = smoothstep(0.22, 0.5, slope);
-        c *= mix(1.0, (0.9 + 0.13 * strata) * (1.0 - 0.2 * cracks), steep);
+        c *= mix(1.0, (0.9 + 0.13 * strata) * (1.0 - 0.2 * cracks * pg), steep);
         float green = clamp((c.g - max(c.r, c.b)) * 10.0, 0.0, 1.0);
-        float blade = step(0.68, vn(wp * 7.5)) * fade * (1.0 - steep);
+        float blade = step(0.68, vn(wp * 7.5)) * fade * (1.0 - steep) * pg;
         c = mix(c, c * vec3(0.72, 0.88, 0.66), green * blade);
-        c = mix(c, c * 1.12, (1.0 - green) * step(0.82, vn(wp * 5.3)) * fade * 0.6);
+        c = mix(c, c * 1.12, (1.0 - green) * step(0.82, vn(wp * 5.3)) * fade * 0.6 * pg);
         // seasons
         float lat = 38.0 - vWPos.z / uK; float north = smoothstep(30.0, 46.0, lat);
         float greenS = clamp((diffuseColor.g - max(diffuseColor.r, diffuseColor.b)) * 6.0, 0.0, 1.0);
@@ -218,7 +258,7 @@
         float snow = clamp(max(snowLow, snowHigh) * flat2, 0.0, 1.0);
         c = mix(c, vec3(0.92, 0.94, 0.98), snow);
         // v13 close-up ground detail: sand ripples, cracked earth, pebbles
-        float near2 = 1.0 - smoothstep(25.0, 110.0, dist);
+        float near2 = (1.0 - smoothstep(25.0, 110.0, dist)) * (1.0 - gtv);
         if (near2 > 0.0 && snow < 0.5) {
           vec3 b0 = diffuseColor.rgb; float lum = dot(b0, vec3(0.33));
           float sandy = clamp((b0.r - b0.b) * 5.0 - 0.6, 0.0, 1.0) * clamp((b0.r - b0.g) * 9.0 + 0.3, 0.0, 1.0) * (1.0 - green) * (1.0 - steep) * smoothstep(0.25, 0.42, lum);
@@ -240,16 +280,33 @@
   function makeObjMat(windows) {
     const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
     m.onBeforeCompile = (sh) => {
-      withWorldVaryings(sh);
+      withWorldVaryings(sh); declVal(sh); SURF.inject(sh);
+      sh.vertexShader = 'attribute vec3 aSurf; varying vec3 vSurf;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vSurf = aSurf;');
+      sh.fragmentShader = 'varying vec3 vSurf;\n' + sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      if (btx > 0.0) { vec3 sv = normalize((viewMatrix * vec4(surfN, 0.0)).xyz); normal = dot(sv, normal) < 0.0 ? -sv : sv; }`);
       if (windows) { sh.vertexShader = 'varying float vLocY;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vLocY = position.y;'); sh.uniforms.time = waterUniforms.time; }
       sh.fragmentShader = (windows ? 'varying float vLocY; uniform float time;\n' : '') + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+      float btx = 0.0; vec3 surfN = vec3(0.0);
       {
         float dist = length(vWPos - cameraPosition); float fade = 1.0 - smoothstep(30.0, 160.0, dist);
         vec3 an = abs(vWNorm);
+        // v22.2: building textures (see src/surfaces.js): per face (u, v, layer + 1) in metres
+        vec2 bdx = dFdx(vSurf.xy), bdy = dFdy(vSurf.xy); float L = floor(vSurf.z + 0.5) - 1.0;
+        if (uBT * uVal > 0.0 && L >= 0.0) {
+          btx = 1.0; int li = int(L); vec4 P = uBP[li]; vec2 uv = vSurf.xy * P.x;
+          vec3 t = textureGrad(tBuild, vec3(uv, L), bdx * P.x, bdy * P.x).rgb;
+          diffuseColor.rgb = surfDet(diffuseColor.rgb, t, uBM[li], P);
+          if (uSN > 1.5) diffuseColor.rgb = 0.5 + 0.5 * cos(6.2832 * (L / 12.0 + vec3(0.0, 0.33, 0.67))); // debug: __gfx.surf.U.uSN.value = 2 paints layers
+          vec3 Nw = normalize(vWNorm); bool fl = abs(Nw.y) >= 0.97;
+          vec3 T = fl ? vec3(1.0, 0.0, 0.0) : normalize(vec3(Nw.z, 0.0, -Nw.x)); vec3 Bt = fl ? vec3(0.0, 0.0, -1.0) : cross(Nw, T);
+          float nf = (1.0 - smoothstep(25.0, 110.0, dist)) * uSN;
+          vec3 nt = textureGrad(tBuildN, vec3(uv, L), bdx * P.x, bdy * P.x).xyz * 2.0 - 1.0;
+          surfN = normalize(Nw + (T * nt.x + Bt * nt.y) * nf * 1.2);
+        }
         vec2 uv = an.y > 0.6 ? vWPos.xz : (an.x > an.z ? vWPos.zy : vWPos.xy);
         float g = vn(uv * 3.0) * 0.5 + vn(uv * 11.0) * 0.5;
         float course = an.y < 0.6 ? smoothstep(0.06, 0.0, abs(fract(vWPos.y * 2.2) - 0.5) - 0.44) : 0.0;
-        diffuseColor.rgb *= mix(1.0, (0.9 + 0.18 * g) * (1.0 - 0.08 * course), fade);
+        diffuseColor.rgb *= mix(1.0, (0.9 + 0.18 * g) * (1.0 - 0.08 * course * (1.0 - btx)), fade * (1.0 - 0.6 * btx));
       }`);
       withStyle(sh, 8.0, 0.0, -0.06); withRim(sh, 0.16);
       if (windows) sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
@@ -327,9 +384,13 @@
   const roadMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 });
   roadMat.onBeforeCompile = (sh) => {
     sh.vertexShader = 'attribute vec2 aRoad; varying vec2 vRoad; varying vec3 vWPos2;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vRoad = aRoad; vWPos2 = (modelMatrix * vec4(transformed, 1.0)).xyz;');
-    sh.fragmentShader = 'varying vec2 vRoad; varying vec3 vWPos2;\n' + GLSL_NOISE + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    declVal(sh); SURF.inject(sh);
+    sh.fragmentShader = 'varying vec2 vRoad; varying vec3 vWPos2;\n' + GLSL_NOISE + sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      if (gtv > 0.0) normal = normalize(normal + (viewMatrix * vec4(surfN, 0.0)).xyz);`).replace('#include <color_fragment>', `#include <color_fragment>
+      float gtv = uGT * uVal; vec3 surfN = vec3(0.0);
       {
-        float u = vRoad.x; float paved = vRoad.y; vec2 wp = vWPos2.xz; vec3 c = diffuseColor.rgb;
+        float u = vRoad.x; float ptype = floor(vRoad.y + 0.5); float paved = min(ptype, 1.0); vec2 wp = vWPos2.xz; vec3 c = diffuseColor.rgb;
+        vec2 gdx = dFdx(wp), gdy = dFdy(wp);
         float ruts = smoothstep(0.13, 0.0, abs(abs(u) - 0.4)) * (0.7 + 0.3 * vn(wp * 0.6));
         float peb = vn(wp * 4.0), peb2 = step(0.8, vn(wp * 9.0));
         vec3 dirt = c * (1.0 - 0.2 * ruts + (peb - 0.5) * 0.14 - peb2 * 0.12);
@@ -337,6 +398,15 @@
         float edge = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
         vec3 cob = c * (0.74 + 0.24 * smoothstep(0.03, 0.13, edge)) * (0.9 + 0.2 * h21(floor(vec2(g.x + row * 0.5, g.y))));
         c = mix(dirt, cob, paved);
+        if (gtv > 0.0) { // v22.2: dry earth for dirt roads; setts (1), flagstones (2) or fan cobbles (3) for paving
+          float L = ptype < 0.5 ? 3.0 : 5.0 + ptype; int li = int(L); vec4 P = uGP[li]; vec2 uv = wp * P.x;
+          vec3 t = textureGrad(tGround, vec3(uv, L), gdx * P.x, gdy * P.x).rgb;
+          vec3 tc = surfDet(diffuseColor.rgb, t, uGM[li], P) * (1.0 - 0.22 * ruts * (1.0 - paved));
+          c = mix(c, tc, gtv);
+          float nf = (1.0 - smoothstep(30.0, 130.0, length(vWPos2 - cameraPosition))) * uSN;
+          vec3 nt = textureGrad(tGroundN, vec3(uv, L), gdx * P.x, gdy * P.x).xyz * 2.0 - 1.0;
+          surfN = vec3(nt.x, 0.0, -nt.y) * nf * (0.8 + 0.6 * paved);
+        }
         c *= 1.0 - 0.14 * smoothstep(0.7, 1.0, abs(u));
         diffuseColor.rgb = c;
       }`);
@@ -486,7 +556,7 @@
   }
   function cultureAt(x, z) { const nc = W.nearestCity(x, z); return nc.c.culture; }
   function buildBridges() {
-    const b = new B.Builder(); const P = W.P;
+    const b = new B.Builder(); const P = W.P; b.setSurf('ashlar');
     for (const br of W.bridges) {
       const cul = cultureAt(br.x, br.z); const ry = Math.atan2(br.tx, br.tz);
       const style = br.style || (cul === 'mongol' || cul === 'steppe' || cul === 'tibet' ? 'wood' : 'stone');
@@ -642,7 +712,7 @@
     }
     W.cityCand = null;
     const skirt = lod === 0 ? 4 : lod === 1 ? 8 : 18;
-    const nv = n * n + 4 * n; const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), col = new Float32Array(nv * 3);
+    const nv = n * n + 4 * n; const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), col = new Float32Array(nv * 3), gw = new Float32Array(nv * 4);
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
       const v = j * n + i; const x = x0 + i * step, z = z0 + j * step; const h = hs[(j + 1) * N + i + 1];
       pos[v * 3] = x; pos[v * 3 + 1] = h; pos[v * 3 + 2] = z;
@@ -653,6 +723,7 @@
       const cav = (hs[(j + 1) * N + i] + hs[(j + 1) * N + i + 2] + hs[j * N + i + 1] + hs[(j + 2) * N + i + 1]) * 0.25 - h;
       const ao = 1 - clamp(cav / step * 0.45, -0.08, 0.28);
       col[v * 3] = c[0] * ao; col[v * 3 + 1] = c[1] * ao; col[v * 3 + 2] = c[2] * ao;
+      gw[v * 4] = TW[0]; gw[v * 4 + 1] = TW[1]; gw[v * 4 + 2] = TW[2]; gw[v * 4 + 3] = TW[3];
     }
     // skirts
     const edgesIdx = [[], [], [], []];
@@ -661,11 +732,11 @@
     for (let j = 0; j < seg; j++) for (let i = 0; i < seg; i++) { const a = j * n + i, b = a + 1, c = a + n, d = c + 1; idx.push(a, c, b, b, c, d); }
     edgesIdx.forEach((list, ei) => {
       const base = sv;
-      for (const v of list) { pos[sv * 3] = pos[v * 3]; pos[sv * 3 + 1] = pos[v * 3 + 1] - skirt; pos[sv * 3 + 2] = pos[v * 3 + 2]; nor.copyWithin(sv * 3, v * 3, v * 3 + 3); col.copyWithin(sv * 3, v * 3, v * 3 + 3); sv++; }
+      for (const v of list) { pos[sv * 3] = pos[v * 3]; pos[sv * 3 + 1] = pos[v * 3 + 1] - skirt; pos[sv * 3 + 2] = pos[v * 3 + 2]; nor.copyWithin(sv * 3, v * 3, v * 3 + 3); col.copyWithin(sv * 3, v * 3, v * 3 + 3); gw.copyWithin(sv * 4, v * 4, v * 4 + 4); sv++; }
       for (let k = 0; k < n - 1; k++) { const a = list[k], b = list[k + 1], c = base + k, d = base + k + 1; idx.push(a, b, c, b, d, c, a, c, b, b, c, d); }
     });
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('aGW', new THREE.BufferAttribute(gw, 4));
     g.setIndex(idx); g.computeBoundingSphere();
     const m = new THREE.Mesh(g, terrainMat); m.receiveShadow = true; m.castShadow = lod === 0;
     return m;
@@ -745,7 +816,25 @@
     // city ground
     if (city && cd < city.R + 2) { const ct = smooth(city.R + 2, city.R - 5, cd) * 0.82; const cg = CULTURE_GROUND[city.culture] || [.78, .7, .58]; r = lerp(r, cg[0] + n2 * .03, ct); g = lerp(g, cg[1] + n2 * .03, ct); b = lerp(b, cg[2] + n2 * .03, ct); }
     TC[0] = lin(clamp(r, 0, 1)); TC[1] = lin(clamp(g, 0, 1)); TC[2] = lin(clamp(b, 0, 1));
+    groundWeights(x, z, r, g, b, dom, bio.dens[bi], pd, city && cd < city.R + 2, rd < rhw + 16);
     return TC;
+  }
+  // v22.2: which ground textures blend here (meadow, patchy grass, sand, forest floor; dry earth takes the rest).
+  // Read from the final colour, so farmland, road dust, city ground, banks and every region fall out of the tuned palette.
+  const TW = [0, 0, 0, 0];
+  function groundWeights(x, z, r, g, b, dom, dens, pd, inCity, bank) {
+    const lum = r * 0.3 + g * 0.55 + b * 0.15, gr = g - r;
+    let meadow = smooth(0.0, 0.09, gr) * smooth(0.02, 0.1, g - b);
+    let patchy = (1 - meadow) * smooth(-0.12, -0.01, gr) * smooth(0.12, 0.24, g - b);
+    const rest = Math.max(0, 1 - meadow - patchy);
+    let sand = rest * smooth(0.6, 0.74, lum) * smooth(0.26, 0.4, r - b) * smooth(-0.04, 0.06, r - g - 0.08) ;
+    sand = Math.max(sand, rest * smooth(0.7, 0.8, lum));
+    let forest = 0;
+    const fd = FOREST_DOM[dom];
+    if (fd && !inCity && pd > 6) forest = meadow * fd * smooth(0.45, 0.8, dens) * smooth(-0.25, 0.2, W.noise(x * 0.012 + 3, z * 0.012 - 7));
+    if (bank) { forest *= 0.3; }
+    meadow -= forest;
+    TW[0] = meadow; TW[1] = patchy; TW[2] = sand; TW[3] = forest;
   }
   // vegetation
   const TREE_SET = ['conifer', 'pine', 'broad', 'olive', 'willow', 'poplar', 'cypress', 'palm', 'bamboo', 'shrub', 'saxaul', 'tuft', 'rock'];
@@ -906,7 +995,7 @@
     const props = propBuckets.get(chKey(cx, cz));
     let pm = null;
     if (props) {
-      const b = new B.Builder();
+      const b = new B.Builder(); b.setSurf('rubble');
       for (const it of props) {
         const h = W.height(it.x, it.z); b.rng = W.rng(it.seed);
         b.push(it.x, h - 0.25, it.z, it.ry); B.PROP[it.t](b, b.rng); b.pop();
@@ -1019,15 +1108,25 @@
     const inside = (x, z, m) => square ? Math.max(Math.abs(x), Math.abs(z)) < half - m : Math.hypot(x, z) < (ws ? rad : city.R - 3) - m;
     return { ws, square, half, rad, inside };
   }
-  function streetRibbon(streets, cg) {
-    const pos = [], ar = [], cc = [], idx = [];
+  // v22.2 paving: 0 packed earth, 1 setts, 2 flagstones, 3 fan cobbles
+  function paveType(cul, kind) {
+    const big = kind === 'main' || kind === 'avenue' || kind === 'plaza';
+    if (cul === 'byz' || cul === 'rum') return kind === 'plaza' ? 3 : big ? 2 : kind === 'lane' || kind === 'alley' ? 1 : 1;
+    if (cul === 'armenian' || cul === 'georgian') return kind === 'plaza' ? 3 : big ? 1 : kind === 'street' ? 1 : 0;
+    if (cul === 'arab' || cul === 'yemen') return big ? 2 : kind === 'street' ? 2 : 0;
+    if (cul === 'persian' || cul === 'central' || cul === 'tarim' || cul === 'indian') return big ? 2 : 0;
+    if (cul === 'chinese' || cul === 'song') return big ? 2 : kind === 'street' ? 1 : 0;
+    return 0; // tibet, mongol, steppe, sea: packed earth
+  }
+  function streetRibbon(streets, cg, cul) {
+    const pos = [], ar = [], cc = [], idx = []; const pave = (k) => paveType(cul, k);
     const col = [lin(cg[0] * .95), lin(cg[1] * .93), lin(cg[2] * .9)];
     for (const st of streets) {
       const P = st.pts; if (P.length < 2) continue;
       for (let i = 0; i < P.length; i++) {
         const a = P[Math.max(0, i - 1)], b2 = P[Math.min(P.length - 1, i + 1)]; let tx = b2[0] - a[0], tz = b2[1] - a[1]; const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
         const k2 = st.kind === 'lane' || st.kind === 'alley' ? 0.93 : 1; const yy = st.kind === 'main' || st.kind === 'avenue' ? 0.11 : 0.1;
-        for (const s of [-1, 1]) { pos.push(P[i][0] - tz * st.hw * s, yy, P[i][1] + tx * st.hw * s); ar.push(s, 1); cc.push(col[0] * k2, col[1] * k2, col[2] * k2); }
+        for (const s of [-1, 1]) { pos.push(P[i][0] - tz * st.hw * s, yy, P[i][1] + tx * st.hw * s); ar.push(s, pave(st.kind)); cc.push(col[0] * k2, col[1] * k2, col[2] * k2); }
         if (i > 0) { const k = pos.length / 3 - 4; idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
       }
     }
@@ -1048,7 +1147,7 @@
     const city = site.city; const rng = W.rng(W.cities.indexOf(city) * 31 + 7);
     const group = new THREE.Group(); group.position.set(city.x, city.h, city.z);
     const b = new B.Builder(); b.rng = rng; const bd = new B.Builder(); bd.rng = rng;
-    const firstBuild = !city.collidersDone; const cul = city.culture; const R = city.R; const tier = city.tier; const CH = cul === 'indian' ? 'haveli' : cul === 'yemen' ? 'towerHouse' : 'courtyardHouse';
+    const firstBuild = !city.collidersDone; const cul = city.culture; const scul = SURF.look(city); b.setSurf(SURF.CITYWALL[scul] || 'stoneWarm'); bd.setSurf(SURF.WALL[scul] || 'plaster'); const R = city.R; const tier = city.tier; const CH = cul === 'indian' ? 'haveli' : cul === 'yemen' ? 'towerHouse' : 'courtyardHouse';
     const style = W.isSquare(city) ? 'grid' : (cul === 'byz' || cul === 'armenian' || cul === 'georgian') ? 'byz' : cul === 'tibet' ? 'tibet' : cul === 'mongol' ? 'camp' : 'islamic';
     const ws = style === 'grid' ? B.wallStyle(cul === 'mongol' ? 'chinese' : cul, city.id) : (style === 'tibet' || style === 'camp') ? null : B.wallStyle(cul, city.id);
     const half = R * 0.7, rad = R - 2.5;
@@ -1157,6 +1256,7 @@
       for (let k = -Math.ceil(R / sp); k <= Math.ceil(R / sp); k++) { if (k === 0) continue; const c = k * sp;
         addStreet([[c * ca - (-R) * sa, c * sa + (-R) * ca], [c * ca - R * sa, c * sa + R * ca]], 2.0, 'street');
         addStreet([[-R * ca - c * sa, -R * sa + c * ca], [R * ca - c * sa, R * sa + c * ca]], 2.0, 'street'); }
+      bd.setSurf(SURF.WALL[scul] || 'plaster');
     } else if (style === 'tibet') {
       const cx = mainLm ? mainLm.x : 0, cz = mainLm ? mainLm.z : 0, rr = (mainLm ? mainLm.r : 6) + 5;
       const ring = []; for (let k = 0; k <= 40; k++) { const a = k / 40 * Math.PI * 2; ring.push([cx + Math.cos(a) * rr, cz + Math.sin(a) * rr]); } addStreet(ring, 2.4, 'street');
@@ -1214,11 +1314,12 @@
       if (!occ.rect(x, z, Math.max(1, w - 0.7), Math.max(1, d - 0.7), ry, 0, true)) return false;
       occ.rect(x, z, w - 0.2, d - 0.2, ry, 2);
       bd.push(x, -0.05, z, ry); houses.push([x, z, w, d, ry, type]);
+      { const hh = Math.abs(Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1; bd.setSurf(type === 'yurt' || type === 'yurtCompound' ? 'felt' : SURF.houseWall(scul, () => hh)); }
       if (type.startsWith('civic:')) B.CIVIC[type.slice(6)](bd, rng, cul);
       else if (type === 'house') B.house(bd, cul === 'mongol' ? 'central' : cul, rng, city.id, w, d);
       else if (type === 'yurt') B.yurt(bd, 0, 0, 1.9, rng() < .1 ? B.C.gold : null);
       else B.CB[type](bd, w, d, rng, cul);
-      bd.pop();
+      bd.pop(); bd.setSurf(SURF.WALL[scul] || 'plaster');
       if (firstBuild) addCollider({ rect: [city.x + x, city.z + z, w / 2, d / 2, ry] });
       count++; return true;
     };
@@ -1241,17 +1342,19 @@
     const byKind = k => streets.filter(s => s.kind === k);
     if (style === 'grid') {
       // trees along the avenues, then shops facing them
-      const tg = B.treeGeo(cul === 'song' ? 'willow' : cul === 'sea' ? 'coconut' : 'sophora');
+      bd.setSurf(null); const tg = B.treeGeo(cul === 'song' ? 'willow' : cul === 'sea' ? 'coconut' : 'sophora');
       for (const st of byKind('avenue').concat(byKind('main'))) { const P = W.resample(st.pts, 9); for (let i = 1; i < P.length - 1; i++) { const r0 = Math.hypot(P[i][0], P[i][1]); if (r0 < 12) continue; let tx = P[i + 1][0] - P[i - 1][0], tz = P[i + 1][1] - P[i - 1][1]; const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
         for (const side of [-1, 1]) { const x = P[i][0] - tz * (st.hw + 1.1) * side, z = P[i][1] + tx * (st.hw + 1.1) * side; if (!inside(x, z, 2) || !occ.circle(x, z, .8, 0, true)) continue; occ.circle(x, z, .9, 2); const s = .55; for (let v = 0; v < tg.pos.length; v += 3) { bd.pos.push(x + tg.pos[v] * s, tg.pos[v + 1] * s - .1, z + tg.pos[v + 2] * s); bd.col.push(tg.col[v], tg.col[v + 1], tg.col[v + 2]); } } } }
+      bd.setSurf(SURF.WALL[scul] || 'plaster');
       for (const st of byKind('avenue').concat(byKind('main'))) for (const side of [-1, 1]) yield* frontage(st, side, { type: cul === 'sea' ? 'stiltHouse' : 'shophouse', w: [4, 5.6], d: [5.5, 6.5], set: 2.2, gap: 0.05, r0: 9 });
       // canal with bridges and willows
       if (canalX !== null) {
         const g2 = new THREE.PlaneGeometry(4.6, 2 * half - 4); g2.rotateX(-Math.PI / 2); const wm = new THREE.Mesh(g2, riverMat); wm.position.set(canalX, -0.35, 0); group.add(wm);
         for (const sx of [-1, 1]) b.box(canalX + sx * 2.5, -0.9, 0, .6, 1.1, 2 * half - 4, 0xa8a294);
         for (const st of streets) { if (st.kind === 'lane') continue; const P = st.pts; const horiz = Math.abs(P[P.length - 1][1] - P[0][1]) < 1; if (!horiz) continue; const z = P[0][1]; for (let t = 0; t < 7; t++) { const u = t / 6; b.box(canalX - 2.9 + u * 5.8, Math.sin(u * Math.PI) * .9 - .2, z, 1.0, .35, st.hw * 2 + .4, 0xb3ab9a); } }
-        const wl = B.treeGeo('willow'); for (let z = -half + 6; z < half - 6; z += 11) for (const sx of [-1, 1]) { const x = canalX + sx * 3.7; if (!occ.circle(x, z, .8, 0, true)) continue; occ.circle(x, z, .9, 2); for (let v = 0; v < wl.pos.length; v += 3) { bd.pos.push(x + wl.pos[v] * .6, wl.pos[v + 1] * .6 - .1, z + wl.pos[v + 2] * .6); bd.col.push(wl.col[v], wl.col[v + 1], wl.col[v + 2]); } }
+        bd.setSurf(null); const wl = B.treeGeo('willow'); for (let z = -half + 6; z < half - 6; z += 11) for (const sx of [-1, 1]) { const x = canalX + sx * 3.7; if (!occ.circle(x, z, .8, 0, true)) continue; occ.circle(x, z, .9, 2); for (let v = 0; v < wl.pos.length; v += 3) { bd.pos.push(x + wl.pos[v] * .6, wl.pos[v + 1] * .6 - .1, z + wl.pos[v + 2] * .6); bd.col.push(wl.col[v], wl.col[v + 1], wl.col[v + 2]); } }
       }
+      bd.setSurf(SURF.WALL[scul] || 'plaster');
       // wards: courtyard compounds facing south, packed along each block
       const xs = [-half, half], zs = [-half, half];
       for (const st of streets) { const P = st.pts; if (P.length < 2) continue; const vert = Math.abs(P[P.length - 1][0] - P[0][0]) < 1, horiz = Math.abs(P[P.length - 1][1] - P[0][1]) < 1; if (vert) xs.push(P[0][0]); if (horiz) zs.push(P[0][1]); }
@@ -1291,7 +1394,7 @@
       yield;
       // fill block interiors with smaller houses
       for (let t = 0; t < R * R * 0.03; t++) { const a = rng() * Math.PI * 2, rr = Math.sqrt(rng()) * rad; const x = Math.cos(a) * rr, z = Math.sin(a) * rr; place(x, z, -theta + Math.round(rng() * 3) * Math.PI / 2, 4 + rng() * 2, 5 + rng() * 2, 'house'); }
-      const cy = B.treeGeo('cypress'); for (let t = 0, k = 0; t < 400 && k < R * .3; t++) { const a = rng() * 6.28, rr = rng() * rad; const x = Math.cos(a) * rr, z = Math.sin(a) * rr; if (!inside(x, z, 2) || !occ.circle(x, z, 1.1, 0, true)) continue; occ.circle(x, z, 1, 2); const s = .6 + rng() * .2; for (let v = 0; v < cy.pos.length; v += 3) { bd.pos.push(x + cy.pos[v] * s, cy.pos[v + 1] * s - .1, z + cy.pos[v + 2] * s); bd.col.push(cy.col[v], cy.col[v + 1], cy.col[v + 2]); } k++; }
+      bd.setSurf(null); const cy = B.treeGeo('cypress'); for (let t = 0, k = 0; t < 400 && k < R * .3; t++) { const a = rng() * 6.28, rr = rng() * rad; const x = Math.cos(a) * rr, z = Math.sin(a) * rr; if (!inside(x, z, 2) || !occ.circle(x, z, 1.1, 0, true)) continue; occ.circle(x, z, 1, 2); const s = .6 + rng() * .2; for (let v = 0; v < cy.pos.length; v += 3) { bd.pos.push(x + cy.pos[v] * s, cy.pos[v + 1] * s - .1, z + cy.pos[v + 2] * s); bd.col.push(cy.col[v], cy.col[v + 1], cy.col[v + 2]); } k++; }
     } else if (style === 'tibet') {
       for (const st of streets) for (const side of [-1, 1]) yield* frontage(st, side, { type: 'house', w: [4.5, 6.5], d: [4.5, 6], set: 0.4, gap: 0.6, civic: 0.05 });
       for (let k = 0; k < 4; k++) { const a = rng() * 6.28, rr = 8 + rng() * R * .6; const x = Math.cos(a) * rr, z = Math.sin(a) * rr; if (!occ.circle(x, z, 2, 0, true)) continue; occ.circle(x, z, 2, 2); bd.push(x, 0, z, rng() * 6); B.PROP.flags(bd, rng); bd.pop(); }
@@ -1328,9 +1431,9 @@
     for (const lm of extras) buildHarbor(group, b, city, lm, firstBuild);
     const mesh = new THREE.Mesh(b.geometry(), objMat); mesh.castShadow = true; mesh.receiveShadow = true; group.add(mesh);
     if (!bd.empty) { const dm = new THREE.Mesh(bd.geometry(), bldMat); dm.castShadow = true; dm.receiveShadow = true; dm.userData.detail = 820; group.add(dm); }
-    const sm = streetRibbon(streets, CULTURE_GROUND[cul] || [.75, .7, .62]); if (sm) group.add(sm);
+    const sm = streetRibbon(streets, CULTURE_GROUND[cul] || [.75, .7, .62], cul); if (sm) group.add(sm);
     { const cg = CULTURE_GROUND[cul] || [.75, .7, .62]; for (const pv of paved) { const pg = new THREE.PlaneGeometry(pv.w, pv.d); pg.rotateX(-Math.PI / 2); const n = pg.attributes.position.count; const ar = new Float32Array(n * 2), cc = new Float32Array(n * 3);
-      for (let i = 0; i < n; i++) { ar[i * 2] = 0; ar[i * 2 + 1] = 1; cc[i * 3] = lin(cg[0] * .97); cc[i * 3 + 1] = lin(cg[1] * .95); cc[i * 3 + 2] = lin(cg[2] * .92); }
+      const pt = Math.max(1, paveType(cul, 'plaza')); for (let i = 0; i < n; i++) { ar[i * 2] = 0; ar[i * 2 + 1] = pt; cc[i * 3] = lin(cg[0] * .97); cc[i * 3 + 1] = lin(cg[1] * .95); cc[i * 3 + 2] = lin(cg[2] * .92); }
       pg.setAttribute('aRoad', new THREE.BufferAttribute(ar, 2)); pg.setAttribute('color', new THREE.BufferAttribute(cc, 3));
       const pm = new THREE.Mesh(pg, roadMat); pm.position.set(pv.x, 0.12, pv.z); pm.rotation.y = pv.ry; pm.receiveShadow = true; group.add(pm); } }
     for (const g of city.gates) addSignpost(group, city, g);
@@ -1341,7 +1444,7 @@
   }
   // ================= VILLAGES =================
   function buildVillage(v) {
-    const rng = W.rng(v.seed); const b = new B.Builder(); b.rng = rng;
+    const rng = W.rng(v.seed); const b = new B.Builder(); b.rng = rng; b.setSurf(SURF.WALL[v.culture] || 'plaster');
     const g = new THREE.Group(); const f = W.flats.find(f => f.ref === v); const h = f ? f.h : W.height(v.x, v.z);
     g.position.set(v.x, h, v.z);
     const occ = OccGrid(v.r + 4); const cul = v.culture; const first = !v.collidersDone;
@@ -1362,7 +1465,7 @@
         if (rng() < .5) { const fx = x + Math.sin(ry) * (d / 2 + 1.4), fz = z + Math.cos(ry) * (d / 2 + 1.4); if (occ.circle(fx, fz, 1.2, 0, true)) { b.push(fx, -0.05, fz, ry); B.FURN[B.pick(rng, ['hay', 'sacks', 'cart', 'crates'])](b, rng); b.pop(); occ.circle(fx, fz, 1.2, 2); } }
       }
       const treeT = { byz: 'cypress', armenian: 'broad', georgian: 'broad', rum: 'poplar', arab: 'palm', persian: 'poplar', central: 'poplar', tarim: 'poplar', chinese: 'willow', song: 'bamboo', tibet: 'poplar', yemen: 'acacia', indian: v.lat < 20 ? 'coconut' : 'banyan', sea: 'coconut' }[cul] || 'broad';
-      const tg = B.treeGeo(v.lat < 33.5 && v.lat > 0 && (cul === 'arab' || cul === 'persian') ? 'palm' : treeT);
+      b.setSurf(null); const tg = B.treeGeo(v.lat < 33.5 && v.lat > 0 && (cul === 'arab' || cul === 'persian') ? 'palm' : treeT);
       for (let t = 0, k = 0; t < 60 && k < 3 + v.n / 2; t++) { const a = rng() * 6.28, rr = rng() * (v.r + 3); const x = Math.cos(a) * rr, z = Math.sin(a) * rr; if (!occ.circle(x, z, 1.3, 0, true)) continue; occ.circle(x, z, 1, 2); const s = .65 + rng() * .3; for (let q = 0; q < tg.pos.length; q += 3) { b.pos.push(x + tg.pos[q] * s, tg.pos[q + 1] * s - .1, z + tg.pos[q + 2] * s); b.col.push(tg.col[q], tg.col[q + 1], tg.col[q + 2]); } k++; }
     }
     v.collidersDone = true;
@@ -1478,7 +1581,7 @@
     if (site.label) return null;
     const g = new THREE.Group(); const h = W.height(site.x, site.z);
     g.position.set(site.x, h - 0.2, site.z);
-    const b = new B.Builder(); b.rng = W.rng(17);
+    const b = new B.Builder(); b.rng = W.rng(17); b.setSurf('stoneWarm');
     b.push(0, 0, 0, site.ry); B.LM[site.lm.type](b, site.lm.p || {}, W.rng(11), 'central'); b.pop();
     // ground skirt for cliffs on slopes
     const m = new THREE.Mesh(b.geometry(), bldMat); m.castShadow = true; m.receiveShadow = true; m.userData.detail = 820; g.add(m);
@@ -1545,7 +1648,7 @@
   }
 
   function setQuality(name) {
-    if (!QUALITY[name]) return; qName = name; Q = QUALITY[name]; try { localStorage.setItem('silkroad_quality', name); } catch (e) { }
+    if (!QUALITY[name]) return; qName = name; Q = QUALITY[name]; SURF.set(undefined, name !== 'low'); try { localStorage.setItem('silkroad_quality', name); } catch (e) { }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.pr)); renderer.setSize(window.innerWidth, window.innerHeight); makeRT();
     sun.castShadow = Q.shadow > 0; if (Q.shadow) { sun.shadow.mapSize.set(Q.shadow, Q.shadow); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
     VIEW = Q.view; if (GFX.setQuality) GFX.setQuality(); for (const [k, c] of chunks) { disposeChunk(c); chunks.delete(k); } updateChunks(player.x, player.z, 0, 400);
@@ -2090,11 +2193,13 @@
   $('pm-yes').onclick = () => { $('pm-confirm').classList.remove('show'); if (HK.restart) HK.restart(); closePause(); };
   document.querySelectorAll('#pm-gfx button').forEach(b => b.onclick = () => setQuality(b.dataset.q));
   document.querySelectorAll('#pm-look button').forEach(b => { b.onclick = () => GFX.setLook(b.dataset.look); b.classList.toggle('on', b.dataset.look === LOOK); });
+  { const sync = () => document.querySelectorAll('#pm-surf button').forEach(b => b.classList.toggle('on', (b.dataset.surf === '1') === SURF.state.on));
+    document.querySelectorAll('#pm-surf button').forEach(b => { b.onclick = () => { SURF.set(b.dataset.surf === '1'); try { localStorage.setItem('silkroad_surf', b.dataset.surf); } catch (e) { } sync(); }; }); sync(); }
   Object.assign(HK, { scene, camera, renderer, player, keys, sites, W, B, objMat, vegMat, addCollider, resolveCollisions, showToast, showBanner, renderCross, updateTarget, tryLock,
     placeAtCity: id => { placeAtCity(id); currentCity = null; hudTimer = 0; for (const s of sites) if (Math.hypot(s.x - player.x, s.z - player.z) < 500 && !s.built) { if (s.gen) s.gen = null; buildSiteSync(s); } updateChunks(player.x, player.z, 0, 480); player.y = W.walkHeight(player.x, player.z) + EYE; },
     getCity: () => currentCity, getSelected: () => selected, clearSelected: () => { selected = null; player.auto = false; updateTarget(); }, visited, lin, CULTURE_GROUND, colliderRemove: c => { for (const a of colHash.values()) { const i = a.indexOf(c); if (i >= 0) a.splice(i, 1); } },
     setPauseWanted: v => { pauseWanted = v; }, isMapOpen: () => mapOpen, toggleMap, openPause, setQuality, setTime: v => GFX.setTime(v), getTime: () => GFX.getTime(), updateChunks: () => updateChunks(player.x, player.z, 0, 480), buildNear: r => { for (const s of sites) if (Math.hypot(s.x - player.x, s.z - player.z) < (r || 500) && !s.built) { if (s.gen) s.gen = null; buildSiteSync(s); } } });
-  window.__game = { buildCityTest: (id) => { const s = sites.find(s => s.city && s.city.id === id); const t0 = performance.now(); const g = buildCitySite(s); let tris = 0; g.traverse(o => { if (o.geometry) tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; }); return { ms: performance.now() - t0, tris }; }, rendererInfo: () => renderer.info.render, scene, sim: (n, dt) => { for (let i = 0; i < n; i++) { updatePlayer(dt); updateHUD(dt); } }, state: () => ({ city: currentCity && currentCity.id, selected, auto: player.auto, visited: visited.size }), chooseRoad, startAuto, player, W, teleport, toggleMap, chunks, sites, keys,
+  window.__game = { buildCityTest: (id) => { const s = sites.find(s => s.city && s.city.id === id); const t0 = performance.now(); const g = buildCitySite(s); let tris = 0; const surf = {}; g.traverse(o => { if (o.geometry) { tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; const A = o.geometry.attributes.aSurf; if (A) for (let i = 2; i < A.array.length; i += 9) { const k = A.array[i] ? SURF.D.build[A.array[i] - 1].name : 'none'; surf[k] = (surf[k] || 0) + 1; } } }); return { ms: performance.now() - t0, tris, surf }; }, rendererInfo: () => renderer.info.render, scene, sim: (n, dt) => { for (let i = 0; i < n; i++) { updatePlayer(dt); updateHUD(dt); } }, state: () => ({ city: currentCity && currentCity.id, selected, auto: player.auto, visited: visited.size }), chooseRoad, startAuto, player, W, teleport, toggleMap, chunks, sites, keys,
     placeOnEdge: (a, b, t, look) => { const e = W.edges.find(e => (e.a === a && e.b === b) || (e.a === b && e.b === a)); const j = e.start + Math.round(t * (e.n - 1)); const P = W.P; player.x = P.X[j]; player.z = P.Z[j]; const k = Math.min(e.start + e.n - 1, j + 3); player.yaw = Math.atan2(-(P.X[k] - P.X[j]), -(P.Z[k] - P.Z[j])) + (look || 0); for (const s of sites) if (Math.hypot(s.x - player.x, s.z - player.z) < 600 && !s.built) { if (s.gen) s.gen = null; buildSiteSync(s); } updateChunks(player.x, player.z, 0, 480); player.y = W.walkHeight(player.x, player.z) + EYE; }, setStarted: () => { started = true; $('intro').classList.add('hide'); $('hud').classList.add('show'); } };
 
   // ================= v13 GRAPHICS: day/night, sky, stars, moon, clouds, weather, bloom =================
@@ -2322,6 +2427,7 @@
   GFX.siteBuilt = s => { if (GFX.onSite) GFX.onSite(s, true); };
   GFX.siteGone = s => { if (GFX.onSite) GFX.onSite(s, false); };
   GFX.look = () => LOOK;
+  GFX.setSurf = (on, normals) => SURF.set(on, normals); GFX.surf = SURF;
   GFX.setLook = (name) => { LOOK = name === 'classic' ? 'classic' : 'valheim'; STYLE_U.uVal.value = LOOK === 'valheim' ? 1 : 0; try { localStorage.setItem('silkroad_look', LOOK); } catch (e) { }
     if (GFX.regrowGrass) GFX.regrowGrass(); document.querySelectorAll('#pm-look button').forEach(b => b.classList.toggle('on', b.dataset.look === LOOK)); };
   window.__gfx = GFX;
