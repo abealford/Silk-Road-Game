@@ -24,8 +24,18 @@ One folder per texture, with these maps when the download had them:
 
 `tree-island-01` came as a Blender model (`island_tree_01_1k.blend`); only its textures are imported, because there's no Blender here to export the model. If it's wanted, export it from Blender as glTF (.glb) and add it under `assets/models/`.
 
+## Second pack (24 Nov 2026)
+41 more CC0 textures from Poly Haven, downloaded by Claude (source pages in `inventory.json`):
+| Group | Textures |
+|---|---|
+| For v22.2 | `rock-cliff-pale`, `rock-cliff-layered`, `rock-dark-lichen`, `snow`, `plaster-white`, `plaster-mud`, `plaster-over-brick`, `mud-wall-cracked`, `mud-brick-rough`, `brick-byzantine`, `roof-tiles-terracotta`, `roof-tiles-grey` |
+| Regional ground | `rock-red`, `rock-ochre`, `scree`, `mud-cracked`, `salt-flat`, `steppe-dry`, `grass-sparse-dry`, `loess`, `laterite`, `pebbles-river`, `moss-rock` |
+| Building | `marble-blocks`, `sandstone-red`, `brick-grey`, `brick-yellow`, `wood-beams-rough`, `bamboo-wall` |
+| Vegetation | `bark-palm`, `conifer-twig-fir`, `conifer-twig-pine` (packed sheet; only the top-left sprays are clean), `fern`, `shrub-leaves` (cards with opacity, from Poly Haven plant models) |
+| Fabrics | `fabric-linen`, `fabric-sackcloth`, `fabric-wool`, `fabric-silk`, `fabric-brocade`, `leather-brown`, `fur-fleece` |
+
 ## Still wanted
-Cliff rock, snow, plaster or stucco, mud brick or adobe, thin red brick (Byzantine), terracotta roof tiles. Also, for the trees: a conifer needle or branch card with opacity, and a palm leaf.
+From ambientCG (needs its download host allowed): turquoise glazed tile, wooden shingles, felt, palm leaf and bamboo leaf cards, carpets.
 
 ## Adding more
 Unzip the download, then run `python3 tools/textures/import_pack.py <folder>` after adding each new folder to the script's `MAP` (slug, description, source page). It needs `pip install OpenEXR pillow numpy` for Poly Haven's EXR maps.
