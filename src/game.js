@@ -761,6 +761,7 @@
   }
   function plotInfo(x, z, ny, pd, sea, lake, city, cd, vil, vd) {
     PI.fm = 0; PI.orch = false;
+    if (city && cd < city.R + 4) return PI; // no fields or orchards inside the walls (fix found in the square demo)
     let fm = 0;
     if (city && cd > city.R + 4 && cd < city.R + 120 && city.culture !== 'mongol' && city.culture !== 'tibet') fm = smooth(city.R + 120, city.R + 50, cd) * smooth(city.R + 4, city.R + 12, cd);
     if (vil && vil.type !== 'nomad' && vd > vil.r - 1 && vd < vil.r + 65) fm = Math.max(fm, smooth(vil.r + 65, vil.r + 24, vd));
@@ -1194,8 +1195,12 @@
     };
     const mainLines = city.corrLines;
     const theta = mainLines.length ? Math.atan2(mainLines[0][Math.min(mainLines[0].length - 1, 8)][1], mainLines[0][Math.min(mainLines[0].length - 1, 8)][0]) : 0;
+    // TEST (square kit): the redesigned town square, Constantinople only
+    const KIT = window.SQUARE_KIT && window.SQUARE_KIT.has(city) ? window.SQUARE_KIT : null;
+    const kitUV = (x, z) => [x * Math.cos(theta) + z * Math.sin(theta), -x * Math.sin(theta) + z * Math.cos(theta)];
+    const kitXZ = (u, v) => [u * Math.cos(theta) - v * Math.sin(theta), u * Math.sin(theta) + v * Math.cos(theta)];
     // 1. caravan roads become the main streets
-    for (const l of mainLines) addStreet(l.filter(p => Math.hypot(p[0], p[1]) < R + 6), style === 'grid' ? 3.6 : 3.0, 'main', false);
+    for (const l of mainLines) addStreet(l.filter(p => Math.hypot(p[0], p[1]) < R + 6 && !(KIT && KIT.inSquare(...kitUV(p[0], p[1])))), style === 'grid' ? 3.6 : 3.0, 'main', false);
     // 2. primary civic spaces
     const paved = []; // {x,z,w,d,ry}
     const plaza = (x, z, w, d, ry) => { paved.push({ x, z, w, d, ry }); occ.rect(x, z, w, d, ry, 1); };
@@ -1203,9 +1208,11 @@
       for (const [ax, az, bx, bz] of [[0, -half - 4, 0, half + 4], [-half - 4, 0, half + 4, 0]]) addStreet([[ax, az], [bx, bz]], 3.6, 'avenue', false);
       plaza(0, 0, 16, 16, 0);
     } else if (style === 'islamic') { const s = tier >= 3 ? [30, 20] : tier >= 2 ? [20, 14] : [12, 10]; plaza(0, 0, s[0], s[1], -theta); }
+    else if (KIT) { const rc = (Q, f) => f(...kitXZ((Q.u0 + Q.u1) / 2, (Q.v0 + Q.v1) / 2), Q.u1 - Q.u0, Q.v1 - Q.v0, -theta); rc(KIT.SQ, plaza); for (const Q of KIT.PAVE) rc(Q, plaza); for (const Q of KIT.RESERVE) rc(Q, (x, z, w, d, ry) => occ.rect(x, z, w, d, ry, 2)); }
     else if (style === 'byz') { const s = tier >= 3 ? 26 : 16; plaza(0, 0, s, s, -theta); }
     else plaza(0, 0, 14, 14, 0);
-    occ.circle(0, 0, 8, 1);
+    if (KIT) KIT.build({ city, group, theta, firstBuild, addCollider, B, objMat, bldMat, rng: W.rng(1272) });
+    else occ.circle(0, 0, 8, 1);
     yield;
     // 3. landmarks
     const gateAngs = city.gates.map(g => g.ang);
@@ -1249,7 +1256,7 @@
       yield;
     }
     // processional way to the main monument
-    if (mainLm) { const dl = Math.hypot(mainLm.x, mainLm.z); if (dl > mainLm.r + 6) { const e2 = (dl - mainLm.r - 1.5) / dl; addStreet([[0, 0], [mainLm.x * e2, mainLm.z * e2]], 2.8, 'avenue', false); } }
+    if (mainLm && !KIT) { const dl = Math.hypot(mainLm.x, mainLm.z); if (dl > mainLm.r + 6) { const e2 = (dl - mainLm.r - 1.5) / dl; addStreet([[0, 0], [mainLm.x * e2, mainLm.z * e2]], 2.8, 'avenue', false); } }
     // 4. street networks
     let canalX = null;
     if (style === 'grid') {
@@ -1738,6 +1745,7 @@
     camera.position.set(player.x, player.y, player.z);
     camera.rotation.set(player.pitch, player.yaw, 0, 'YXZ');
     if (HK.viewFrame) HK.viewFrame(dt || 0);
+    if (window.SQUARE_KIT) window.SQUARE_KIT.frame(player, dt || 0);
     if (HK.cineCam) HK.cineCam(camera, dt || 0); // v21: the story's cutscenes take the camera
   }
   function jump() { if (player.jy > 0 || player.vy > 0 || (HK.frozen && HK.frozen()) || pauseOpen() || (HK.canJump && !HK.canJump())) return; player.vy = 5.6; player.jy = 0.001; }
@@ -2227,7 +2235,7 @@
     placeAtCity: id => { placeAtCity(id); currentCity = null; hudTimer = 0; for (const s of sites) if (Math.hypot(s.x - player.x, s.z - player.z) < 500 && !s.built) { if (s.gen) s.gen = null; buildSiteSync(s); } updateChunks(player.x, player.z, 0, 480); player.y = W.walkHeight(player.x, player.z) + EYE; },
     getCity: () => currentCity, getSelected: () => selected, clearSelected: () => { selected = null; player.auto = false; updateTarget(); }, visited, lin, CULTURE_GROUND, colliderRemove: c => { for (const a of colHash.values()) { const i = a.indexOf(c); if (i >= 0) a.splice(i, 1); } },
     setPauseWanted: v => { pauseWanted = v; }, isMapOpen: () => mapOpen, toggleMap, openPause, setQuality, setTime: v => GFX.setTime(v), getTime: () => GFX.getTime(), updateChunks: () => updateChunks(player.x, player.z, 0, 480), buildNear: r => { for (const s of sites) if (Math.hypot(s.x - player.x, s.z - player.z) < (r || 500) && !s.built) { if (s.gen) s.gen = null; buildSiteSync(s); } } });
-  window.__game = { buildCityTest: (id) => { const s = sites.find(s => s.city && s.city.id === id); const t0 = performance.now(); const g = buildCitySite(s); let tris = 0; const surf = {}; g.traverse(o => { if (o.geometry) { tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; const A = o.geometry.attributes.aSurf; if (A) for (let i = 2; i < A.array.length; i += 9) { const k = A.array[i] ? SURF.D.build[A.array[i] - 1].name : 'none'; surf[k] = (surf[k] || 0) + 1; } } }); return { ms: performance.now() - t0, tris, surf }; }, rendererInfo: () => renderer.info.render, scene, sim: (n, dt) => { for (let i = 0; i < n; i++) { updatePlayer(dt); updateHUD(dt); } }, state: () => ({ city: currentCity && currentCity.id, selected, auto: player.auto, visited: visited.size }), chooseRoad, startAuto, player, W, teleport, toggleMap, chunks, sites, keys,
+  window.__game = { camera, buildCityTest: (id) => { const s = sites.find(s => s.city && s.city.id === id); const t0 = performance.now(); const g = buildCitySite(s); let tris = 0; const surf = {}; g.traverse(o => { if (o.geometry) { tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; const A = o.geometry.attributes.aSurf; if (A) for (let i = 2; i < A.array.length; i += 9) { const k = A.array[i] ? SURF.D.build[A.array[i] - 1].name : 'none'; surf[k] = (surf[k] || 0) + 1; } } }); return { ms: performance.now() - t0, tris, surf }; }, rendererInfo: () => renderer.info.render, scene, sim: (n, dt) => { for (let i = 0; i < n; i++) { updatePlayer(dt); updateHUD(dt); } }, state: () => ({ city: currentCity && currentCity.id, selected, auto: player.auto, visited: visited.size }), chooseRoad, startAuto, player, W, teleport, toggleMap, chunks, sites, keys,
     placeOnEdge: (a, b, t, look) => { const e = W.edges.find(e => (e.a === a && e.b === b) || (e.a === b && e.b === a)); const j = e.start + Math.round(t * (e.n - 1)); const P = W.P; player.x = P.X[j]; player.z = P.Z[j]; const k = Math.min(e.start + e.n - 1, j + 3); player.yaw = Math.atan2(-(P.X[k] - P.X[j]), -(P.Z[k] - P.Z[j])) + (look || 0); for (const s of sites) if (Math.hypot(s.x - player.x, s.z - player.z) < 600 && !s.built) { if (s.gen) s.gen = null; buildSiteSync(s); } updateChunks(player.x, player.z, 0, 480); player.y = W.walkHeight(player.x, player.z) + EYE; }, setStarted: () => { started = true; $('intro').classList.add('hide'); $('hud').classList.add('show'); } };
 
   // ================= v13 GRAPHICS: day/night, sky, stars, moon, clouds, weather, bloom =================
@@ -2764,7 +2772,7 @@
       for (const gt of c.gates) { const lx = gt.gx - ox, lz = gt.gz - oz; const dl = Math.hypot(lx, lz) || 1; const nx = -lz / dl, nz = lx / dl; const inx = -lx / dl, inz = -lz / dl;
         for (const sd of [-1, 1]) { const fxp = lx + nx * sd * 5.2 + inx * 3, fzp = lz + nz * sd * 5.2 + inz * 3; flag(fxp, fzp, 8.5, Math.atan2(.3, 1) + r() * .6, false);
           light(fxp + inx, W.height(ox + fxp, oz + fzp) - oy + 2.6, fzp + inz, FIRE, 1.6); fx.smoke.push([ox + fxp + inx, W.height(ox + fxp, oz + fzp) + 3.1, oz + fzp + inz, .25]); } }
-      for (let k = 0; k < 2 + c.tier; k++) { const a = k / (2 + c.tier) * 6.28 + r(), rr = 8 + r() * 6; flag(Math.cos(a) * rr, Math.sin(a) * rr, 7 + r() * 2, r() * 6.28, true); }
+      if (!c.squareKit) for (let k = 0; k < 2 + c.tier; k++) { const a = k / (2 + c.tier) * 6.28 + r(), rr = 8 + r() * 6; flag(Math.cos(a) * rr, Math.sin(a) * rr, 7 + r() * 2, r() * 6.28, true); }
       // lanterns along the main streets, market stalls along the bazaar spines
       const occ = c.occ; let stalls = 0; const stallMax = Math.round((10 + c.tier * 12) * (0.5 + 0.5 * Q.life));
       const awn = [0xc8402a, 0xe8c050, 0x2f6f8f, 0xf0e6c8, 0x5a8a4a, 0xb05a8a];

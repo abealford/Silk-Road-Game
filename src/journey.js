@@ -2162,7 +2162,7 @@
   H.compassMarks = () => { const c = H.getCity(); const vs = c && vendorSets.get(c.id); const out = []; if (vs) for (const v of vs.vendors) if (v.role === 'harbour' && Math.hypot(v.x - H.player.x, v.z - H.player.z) > 5) out.push({ x: v.x, z: v.z, c: '#2a5a8a', t: '⚓' }); return out; };
   { const o = H.mapCityInfo; H.mapCityInfo = c => { const q = questPins().filter(q => q.city === c.id); return (q.length ? `<div class="mx-qpins">${q.map(q => `<div><span style="color:${q.color}">⚑</span> ${q.text}</div>`).join('')}</div>` : '') + (o ? o(c) : ''); }; }
   // the model kit, for the third-person view
-  Object.assign(H.lifeKit, { makePerson: (...a) => { W = W || H.W; B = B || H.B; return makePerson(...a); }, makeAnimal: (...a) => { W = W || H.W; B = B || H.B; return makeAnimal(...a); }, animate });
+  Object.assign(H.lifeKit, { textSprite: t => textSprite(t), makePerson: (...a) => { W = W || H.W; B = B || H.B; return makePerson(...a); }, makeAnimal: (...a) => { W = W || H.W; B = B || H.B; return makeAnimal(...a); }, animate });
   H.canJump = () => !voy && !ui;
   // what the admin tools reach inside the journey
   H.J = { get S() { return S; }, get MODE() { return MODE; }, get ui() { return ui; }, get voy() { return voy; }, M, EVENTS,
