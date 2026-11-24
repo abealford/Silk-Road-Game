@@ -6,7 +6,7 @@ const WORLD = (() => {
   const W = {};
   const COS = Math.cos(38 * Math.PI / 180);
   const LON0 = 75, LAT0 = 38;
-  W.WALK = 8; W.SPRINT = 16; W.TARGET_SECONDS = 2430; // v22-scale test: 1.5x v22 (was 1620 = 27 min; v1 was 9 min)
+  W.WALK = 8; W.SPRINT = 16; W.TARGET_SECONDS = 2430; // v22.2c: 1.5x v22.2 (was 1620 = 27 min; v1 was 9 min)
   W.HS = 2.9; // vertical scale for mountains/plateaus (slightly steeper than v2)
   W.VF = W.HS / 1.3; W.SC = 2;
   W.STEP = 2; // road sample spacing (world units)
