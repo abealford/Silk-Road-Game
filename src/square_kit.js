@@ -33,105 +33,117 @@ window.SQUARE_KIT = (() => {
     return { id: city.id, town, ven, s, tier: city.tier, SQ, RESERVE: [], PAVE: [], place: {}, missing: [] };
   }
   const inR = (r, u, v) => u >= r.u0 && u <= r.u1 && v >= r.v0 && v <= r.v1;
-  const blocked = (L, u, v) => (u >= L.SQ.u0 - 1 && u <= L.SQ.u1 + 1 && v >= L.SQ.v0 - 1 && v <= L.SQ.v1 + 1) || L.RESERVE.some(r => inR(r, u, v)) || L.PAVE.some(r => inR(r, u, v));
+  const blocked = (L, u, v) => (u >= L.SQ.u0 - 1 && u <= L.SQ.u1 + 1 && v >= L.SQ.v0 - 1 && v <= L.SQ.v1 + 1) || Object.values(L.place || {}).some(b => inPiece(b, u, v) || (b.pc.pave && (() => { const h = toHome(b.xf, u, v), R = b.pc.pave; return h[0] > R.u0 && h[0] < R.u1 && h[1] > R.v0 && h[1] < R.v1; })()));
   const resample = (pts, step) => { const out = []; for (let i = 0; i < pts.length - 1; i++) { const [ax, az] = pts[i], [bx, bz] = pts[i + 1]; const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / step)); for (let k = 0; k < n; k++) out.push([ax + (bx - ax) * k / n, az + (bz - az) * k / n]); } if (pts.length) out.push(pts[pts.length - 1]); return out; };
 
-  // ---------- pieces and where they can go ----------
-  // Each piece is drawn in "home" coordinates (Constantinople's layout, a 26 x 26 square) against one edge of the
-  // square: N (v = -13), S (v = +13) or W (u = -13), centred at offset `a` along that edge. It can be turned onto any
-  // edge and slid along it. `rects` are its footprint with a small margin (inner: inside the square only).
-  const EDGES = { N: 0, W: Math.PI / 2, S: Math.PI, E: Math.PI * 1.5 };
+  // ---------- pieces and the four corners ----------
+  // Each piece is drawn in "home" coordinates (Constantinople's test-1 layout). It has an anchor (the middle of its
+  // front, where you walk up to it) and a home outward direction (th, the way its back points). The planner turns it
+  // so its back points out of one corner of the square and its front faces the square's centre, then moves it so the
+  // anchor sits on that corner's diagonal. rects: its footprint (with a margin) in home coordinates.
   const rot = (u, v, r) => [u * Math.cos(r) + v * Math.sin(r), -u * Math.sin(r) + v * Math.cos(r)];
-  function xform(pc, edge, a, s) {
-    const rH = EDGES[pc.edge], rT = EDGES[edge], r = rT - rH;
-    const nH = rot(0, -1, rH), eH = rot(1, 0, rH), nT = rot(0, -1, rT), eT = rot(1, 0, rT);
-    const hd = pc.hd === undefined ? 13 : pc.hd; const PH = [nH[0] * hd + eH[0] * pc.a, nH[1] * hd + eH[1] * pc.a], PT = [nT[0] * s + eT[0] * a, nT[1] * s + eT[1] * a];
-    const rp = rot(PH[0], PH[1], r); return { r, ou: PT[0] - rp[0], ov: PT[1] - rp[1], edge, a };
-  }
-  const xpt = (xf, u, v) => { const p = rot(u, v, xf.r); return [p[0] + xf.ou, p[1] + xf.ov]; };
-  const xrect = (xf, R) => { const c = [xpt(xf, R.u0, R.v0), xpt(xf, R.u1, R.v1)]; return { u0: Math.min(c[0][0], c[1][0]), u1: Math.max(c[0][0], c[1][0]), v0: Math.min(c[0][1], c[1][1]), v1: Math.max(c[0][1], c[1][1]), k: R.k }; };
+  const TH = { N: -Math.PI / 2, S: Math.PI / 2, W: Math.PI };
   function pieces(L) {
     const P = [];
-    if (L.ven) for (const dV of (L.tier >= 3 ? [0, 5, 7.5] : [5, 7.5])) P.push({ name: 'ven', dV, edge: 'N', a: 9, cost: dV * .3,
-      rects: [{ u0: 2.0, u1: 18.2, v0: -24.6 + dV, v1: -12.3, k: 'alleyHouses' }, { u0: 1.8, u1: 18.4, v0: -36.4 + dV, v1: -23.4 + dV, k: 'scuola' }],
-      pave: { u0: 6.4, u1: 11.6, v0: -24.2 + dV, v1: -12.5 } });
-    // each building can also step 4 m into the square when the walls or roads leave no room behind it
-    for (const hd of [13, 9]) {
-      const c = hd === 13 ? 0 : 3;
-      P.push({ name: 'tavern', edge: 'S', a: -1, hd, cost: c, rects: [{ u0: -7.2, u1: 5.0, v0: 8.8, v1: 21.4, k: 'tavern' }] });
-      P.push({ name: 'stables', edge: 'S', a: 9.3, hd, cost: c, rects: [{ u0: 4.4, u1: 14.8, v0: 9.8, v1: 18.8, k: 'stables' }] });
-      P.push({ name: 'smith', edge: 'N', a: -2.5, hd, cost: c, rects: [{ u0: -8.2, u1: 3.0, v0: -20.2, v1: -8.2, k: 'smith' }] });
+    P.push({ name: 'smith', th: TH.N, an: [-2.5, -8.2], rects: [{ u0: -8.2, u1: 7.2, v0: -20.2, v1: -7.0, k: 'smith' }] });   // with the stable man and his animal at its east side
+    if (L.town) P.push({ name: 'smith', sv: 'front', small: true, th: TH.N, an: [-2.5, -5.2], cost: 3, rects: [{ u0: -7.2, u1: 2.2, v0: -18.2, v1: -4.4, k: 'smith' }] });   // a small town smithy
+    P.push({ name: 'smith', sv: 'front', th: TH.N, an: [-2.5, -5.2], cost: 2, rects: [{ u0: -8.2, u1: 3.0, v0: -20.2, v1: -4.4, k: 'smith' }] });   // narrower: the stable man stands out in front instead
+    P.push({ name: 'market', mv: 'full', th: TH.W, an: [-1.8, -1], rects: [{ u0: -13, u1: -1.8, v0: -8.2, v1: 8.2 }].concat(L.town ? [] : [{ u0: -13, u1: -9.6, v0: -11, v1: 11 }]) });
+    P.push({ name: 'market', mv: 'medium', th: TH.W, an: [-3.3, -1], cost: 1, rects: [{ u0: -13, u1: -3.3, v0: -8.2, v1: 8.2 }] });
+    P.push({ name: 'market', mv: 'compact', th: TH.W, an: [-3.3, -1], cost: 2.5, rects: [{ u0: -10.2, u1: -3.3, v0: -5.8, v1: 3.8 }] });
+    P.push({ name: 'market', mv: 'tiny', th: TH.W, an: [-3.3, -1], cost: 6, rects: [{ u0: -7, u1: -3.3, v0: -5.8, v1: 3.8 }] });
+    if (!L.town) {
+      P.push({ name: 'tavern', th: TH.S, an: [-1, 8.8], rects: [{ u0: -7.2, u1: 5.0, v0: 8.8, v1: 21.4, k: 'tavern' }] });
+      for (const dV of (L.tier >= 3 ? [0, 5, 7.5, 10] : [5, 7.5, 10])) P.push({ name: 'ven', dV, th: TH.N, an: [9, -12.3], cost: dV * .3,
+        rects: [{ u0: 2.0, u1: 18.2, v0: -24.6 + dV, v1: -12.3 }, { u0: 1.8, u1: 18.4, v0: -36.4 + dV, v1: -23.4 + dV }],
+        pave: { u0: 6.4, u1: 11.6, v0: -24.2 + dV, v1: -12.5 } });
     }
-    // the market: full (shoppers in front), medium (no one in front), or compact (the Merchant and two stalls) to fit between roads
-    const colB = L.town ? [] : [{ u0: -13, u1: -9.6, v0: -11, v1: 11, k: 'market2' }];
-    P.push({ name: 'market', mv: 'full', edge: 'W', a: 0, inner: true, rects: [{ u0: -13, u1: -1.8, v0: -8.2, v1: 8.2, k: 'market' }].concat(colB) });
-    P.push({ name: 'market', mv: 'medium', edge: 'W', a: 0, inner: true, cost: 1, rects: [{ u0: -13, u1: -3.3, v0: -8.2, v1: 8.2, k: 'market' }].concat(colB) });
-    P.push({ name: 'market', mv: 'compact', edge: 'W', a: -1, inner: true, cost: 2.5, rects: [{ u0: -10.2, u1: -3.3, v0: -5.8, v1: 3.8, k: 'market' }] });
-    // ...or to the side: the same market just outside the square, its front on the square's edge, facing in
-    P.push({ name: 'market', mv: 'medium', edge: 'W', a: 0, hd: 3.3, cost: 4, rects: [{ u0: -13, u1: -3.3, v0: -8.2, v1: 8.2, k: 'market' }].concat(colB) });
-    P.push({ name: 'market', mv: 'compact', edge: 'W', a: -1, hd: 3.3, cost: 5, rects: [{ u0: -10.2, u1: -3.3, v0: -5.8, v1: 3.8, k: 'market' }] });
-    // last resort: the Merchant's stall alone
-    for (const hd of [13, 3.3]) P.push({ name: 'market', mv: 'tiny', edge: 'W', a: -1, hd, inner: hd === 13, cost: 7, rects: [{ u0: -7, u1: -3.3, v0: -5.8, v1: 3.8, k: 'market' }] });
     return P;
   }
+  // place piece pc with its back pointing along angle al (kit frame), anchor at distance df from the centre, slid t sideways
+  function xformAt(pc, al, df, t) {
+    const r = pc.th - al;                                   // rot(.., r) turns the home outward direction onto al
+    const tx = Math.cos(al) * df - Math.sin(al) * t, tv = Math.sin(al) * df + Math.cos(al) * t;
+    const ra = rot(pc.an[0], pc.an[1], r); return { r, ou: tx - ra[0], ov: tv - ra[1], al, df, t };
+  }
+  const xpt = (xf, u, v) => { const p = rot(u, v, xf.r); return [p[0] + xf.ou, p[1] + xf.ov]; };
+  const toHome = (xf, u, v) => rot(u - xf.ou, v - xf.ov, -xf.r);
+  const inPiece = (b, u, v, m = 0) => { const h = toHome(b.xf, u, v); return b.pc.rects.some(R => h[0] > R.u0 - m && h[0] < R.u1 + m && h[1] > R.v0 - m && h[1] < R.v1 + m); };
+  const rectPts = R => { const out = []; const nu = Math.max(1, Math.ceil((R.u1 - R.u0) / 1.5)), nv = Math.max(1, Math.ceil((R.v1 - R.v0) / 1.5)); for (let i = 0; i <= nu; i++) for (let j = 0; j <= nv; j++) if (i === 0 || j === 0 || i === nu || j === nv) out.push([R.u0 + (R.u1 - R.u0) * i / nu, R.v0 + (R.v1 - R.v0) * j / nv]); return out; };
 
-  // Choose the square's facing and put each piece where it keeps every road clear (with a walking margin)
-  // and stays inside the walls. Pieces keep their home spots when they can; if one fits nowhere, it is left out.
   const planCache = new Map();
-  // a 1 m grid over the square's surroundings marking every cell too close to a road; query(rect) answers in O(1)
-  const GH = 62, GN = GH * 2;
-  function roadMap(R, inner, tight) {
+  // a 1 m grid in a turned frame marking every cell too close to a road; query(rect) answers in O(1)
+  const GH = 70, GN = GH * 2;
+  function roadMap(R) {
     const g = new Uint8Array(GN * GN);
-    for (const [u, v, m0] of R) {
-      if (inner && u * u + v * v < 30) continue; const m = (inner ? m0 - .9 : m0) - tight * 1.0;
+    for (const [u, v, m] of R) {
       const i0 = Math.max(0, Math.floor(u - m + GH)), i1 = Math.min(GN - 1, Math.floor(u + m + GH)), j0 = Math.max(0, Math.floor(v - m + GH)), j1 = Math.min(GN - 1, Math.floor(v + m + GH));
       for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) g[j * GN + i] = 1;
     }
     const S = new Int32Array((GN + 1) * (GN + 1));
     for (let j = 0; j < GN; j++) { let row = 0; for (let i = 0; i < GN; i++) { row += g[j * GN + i]; S[(j + 1) * (GN + 1) + i + 1] = S[j * (GN + 1) + i + 1] + row; } }
-    return r => { const i0 = Math.max(0, Math.floor(r.u0 + GH)), i1 = Math.min(GN, Math.ceil(r.u1 + GH)), j0 = Math.max(0, Math.floor(r.v0 + GH)), j1 = Math.min(GN, Math.ceil(r.v1 + GH)); if (i1 <= i0 || j1 <= j0) return false;
+    return (u0, u1, v0, v1) => { const i0 = Math.max(0, Math.floor(u0 + GH)), i1 = Math.min(GN, Math.ceil(u1 + GH)), j0 = Math.max(0, Math.floor(v0 + GH)), j1 = Math.min(GN, Math.ceil(v1 + GH)); if (i1 <= i0 || j1 <= j0) return false;
       return S[j1 * (GN + 1) + i1] - S[j0 * (GN + 1) + i1] - S[j1 * (GN + 1) + i0] + S[j0 * (GN + 1) + i0] > 0; };
   }
+  const PERMS = (n) => { const out = []; const f = (a, rest) => { if (!rest.length) { out.push(a); return; } rest.forEach((x, i) => f(a.concat([x]), rest.filter((_, j) => j !== i))); }; f([], [...Array(n).keys()]); return out; };
+
+  // Choose the square's facing and give each piece its own corner, clear of every road (walking margin) and inside the walls.
   function plan(L, theta, lines, inside, grid) {
     const ck = L.id; if (ck && planCache.has(ck)) { Object.assign(L, planCache.get(ck)); return L.phi; }
     const s = L.s, roads = [];
-    for (const l of lines) for (const p of resample(l.pts, 1.2)) if (Math.hypot(p[0], p[1]) < s + 48) roads.push([p[0], p[1], l.hw + 1.4]);
-    const PCS = pieces(L); const OFFS = []; for (let a = -(s + 7); a <= s + 7; a += 1.5) OFFS.push(a); const ORDERS = [['ven', 'market', 'tavern', 'smith', 'stables'], ['ven', 'tavern', 'stables', 'smith', 'market'], ['market', 'ven', 'tavern', 'smith', 'stables']].map(o => o.filter(n => PCS.some(p => p.name === n)));
-    const maps = {}; let best = null; const N = grid ? 4 : 16; const base = grid ? Math.round(theta / (Math.PI / 2)) * Math.PI / 2 : theta;
-    const ks = []; for (let k = 0; k < N; k++) ks.push(k > N / 2 ? k - N : k); ks.sort((a, b) => Math.abs(a) - Math.abs(b));
-    for (const k of ks) for (const names of ORDERS) {
-      if (best && !best.missing.length && best.cost < 5) break;   // everything fits close to home: good enough
-      const phi = base + k / N * Math.PI * 2; const ca = Math.cos(phi), sa = Math.sin(phi);
-      if (!maps[k]) { const R = roads.map(([x, z, m]) => [x * ca + z * sa, -x * sa + z * ca, m]); maps[k] = [0, 1].map(inner => [0, 1].map(tight => roadMap(R, inner, tight))); }
-      const RM = maps[k];
+    for (const l of lines) for (const p of resample(l.pts, 1.2)) { const d = Math.hypot(p[0], p[1]); if (d > 6 && d < s + 50) roads.push([p[0], p[1], l.hw + 1.4]); }
+    const PCS = pieces(L); const names = [...new Set(PCS.map(p => p.name))];   // smith, market, tavern?, ven?
+    const perms = PERMS(4).filter(p => names.length === 4 || p.slice(names.length).every((x, i, a) => i === 0 || a[i - 1] < x));
+    const N = grid ? 1 : 24; const base = grid ? Math.round(theta / (Math.PI / 2)) * Math.PI / 2 : theta;
+    const DF = [1.05, 1.2, 1.35, 1.5, 1.7, .9].map(f => f * s), TS = [0, -2, 2, -4, 4, -6, 6];
+    let best = null;
+    for (let k = 0; k < N; k++) {
+      const phi = base + k / N * Math.PI / 2;               // the corners repeat every quarter turn
+      const ca = Math.cos(phi), sa = Math.sin(phi);
+      const RK = roads.map(([x, z, m]) => [x * ca + z * sa, -x * sa + z * ca, m]);
       const inWalls = (u, v) => inside(u * ca - v * sa, u * sa + v * ca, 0.8);
-      let da = Math.abs(((phi - theta) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
-      let cost = da * .6; const placed = []; const out = {}; const missing = [];
-      for (const nm of names) {
-        let bc = null;
-        for (const tight of [0, 1]) { if (bc) break;
-        for (const pc of PCS.filter(p => p.name === nm)) for (const edge of ['N', 'S', 'W', 'E']) for (const a of [pc.a].concat(OFFS)) {
-          const xf = xform(pc, edge, a, s); const rs = pc.rects.map(r => xrect(xf, r));
-          let ok = true;
-          for (const r of rs) {   // cheapest checks first: square bounds, other pieces, roads, then the walls
-            if (pc.inner && (r.u0 < -s - .1 || r.u1 > s + .1 || r.v0 < -s - .1 || r.v1 > s + .1)) { ok = false; break; }
-            for (const q of placed) if (r.u0 < q.u1 + .4 && r.u1 > q.u0 - .4 && r.v0 < q.v1 + .4 && r.v1 > q.v0 - .4) { ok = false; break; }
-            if (!ok) break;
-            if (RM[pc.inner ? 1 : 0][tight](r)) { ok = false; break; }
+      const maps = new Map(); const mapFor = (r, tight) => { const key = Math.round(r * 1000) * 2 + tight; if (!maps.has(key)) maps.set(key, roadMap(RK.map(([u, v, m]) => { const q = rot(u, v, -r); return [q[0], q[1], m - tight]; }))); return maps.get(key); };
+      // the best spot for each piece in each corner, on its own
+      const opts = {};
+      for (const nm of names) { opts[nm] = [];
+        for (const tight of [0, 1]) { if (opts[nm].some(Boolean)) break;   // a narrower walking margin only if the piece fits no corner otherwise
+        for (let c = 0; c < 4; c++) { const diag = phi + Math.PI / 4 + c * Math.PI / 2; let bc = null;
+          // diagonal, facing the centre; or, as a last resort, square to the corner (front facing across the square)
+          const cands = []; for (const df of DF) for (const t of TS) cands.push([diag, df, t, 0]);
+          for (const sg of [-1, 1]) for (const df of [.7, .9, 1.1, 1.3].map(f => f * s)) for (const t of [6, 8, 10, 12]) cands.push([diag + sg * Math.PI / 4, df, -sg * t, 4]);
+          for (const pc of PCS.filter(p => p.name === nm)) for (const [al, df, t, ac] of cands) {
+            if (ac && bc) break;
+            const xf = xformAt(pc, al, df, t); const M = mapFor(xf.r, tight); const S = rot(xf.ou, xf.ov, -xf.r);
+            if (pc.rects.some(R => M(R.u0 + S[0], R.u1 + S[0], R.v0 + S[1], R.v1 + S[1]))) continue;
+            if (pc.rects.some(R => [[R.u0, R.v0], [R.u1, R.v0], [R.u0, R.v1], [R.u1, R.v1]].some(([u, v]) => !inWalls(...xpt(xf, u, v))))) continue;
+            const c2 = (pc.cost || 0) + ac + tight * 8 + Math.abs(df - 1.2 * s) * .25 + (ac ? 0 : Math.abs(t) * .2);
+            if (!bc || c2 < bc.c) bc = { c: c2, xf, pc };
+            if (bc && bc.c < (pc.cost || 0) + .9) break;
           }
-          if (ok && !pc.inner) for (const r of rs) if (!inWalls(r.u0, r.v0) || !inWalls(r.u1, r.v0) || !inWalls(r.u0, r.v1) || !inWalls(r.u1, r.v1)) { ok = false; break; }
-          if (!ok) continue;
-          let c = (pc.cost || 0) + tight * 6 + (edge !== pc.edge ? 3 : 0) + Math.abs(a - pc.a) * .15;
-          if (nm === 'stables' && out.tavern) { const t = out.tavern.rs[0], m = rs[0]; c += Math.hypot((t.u0 + t.u1 - m.u0 - m.u1) / 2, (t.v0 + t.v1 - m.v0 - m.v1) / 2) * .12; }
-          if (!bc || c < bc.c) bc = { c, xf, rs, pc };
+          opts[nm][c] = bc;
         } }
-        if (bc) { out[nm] = bc; placed.push(...bc.rs); cost += bc.c; } else { missing.push(nm); cost += nm === 'ven' ? 60 : 100; }
       }
-      if (!best || cost < best.cost) best = { cost, phi, out, missing };
+      // give each piece a different corner; pieces must not overlap
+      for (const perm of perms) {
+        let cost = 0; const out = {}; const missing = []; const placed = [];
+        names.forEach((nm, i) => {
+          const b = opts[nm][perm[i]];
+          if (!b || placed.some(q => b.pc.rects.some(R => rectPts(R).some(([u, v]) => inPiece(q, ...xpt(b.xf, u, v), .4))) || q.pc.rects.some(R => rectPts(R).some(([u, v]) => inPiece(b, ...xpt(q.xf, u, v), .4))))) { missing.push(nm); cost += 100; return; }
+          out[nm] = b; placed.push(b); cost += b.c;
+        });
+        if (names.includes('ven') && perm[names.indexOf('ven')] !== 3) cost += .5;   // a small wish: the Venetian Quarter north-east, as in test 1
+        if (!best || cost < best.cost) best = { cost, phi, out, missing };
+      }
     }
     L.place = best.out; L.missing = best.missing; L.phi = best.phi;
     L.RESERVE = []; L.PAVE = [];
-    for (const nm in best.out) { const b = best.out[nm]; for (const r of b.rs) L.RESERVE.push(r); if (b.pc.pave) L.PAVE.push(xrect(b.xf, b.pc.pave)); }
+    for (const nm in best.out) { const b = best.out[nm];
+      for (const R of b.pc.rects) { const c = xpt(b.xf, (R.u0 + R.u1) / 2, (R.v0 + R.v1) / 2); L.RESERVE.push({ cu: c[0], cv: c[1], w: R.u1 - R.u0, d: R.v1 - R.v0, r: b.xf.r }); }
+      { // a paved walkway from the middle of the square to the piece's front, kept free of houses so nothing hides it
+        const A = xpt(b.xf, b.pc.an[0], b.pc.an[1]); const len = Math.hypot(A[0], A[1]) + 1, along = b.pc.th === TH.W;
+        L.PAVE.push({ cu: A[0] / 2, cv: A[1] / 2, w: along ? len : 7, d: along ? 7 : len, r: b.xf.r }); }
+      if (b.pc.pave) { const R = b.pc.pave, c = xpt(b.xf, (R.u0 + R.u1) / 2, (R.v0 + R.v1) / 2); L.PAVE.push({ cu: c[0], cv: c[1], w: R.u1 - R.u0, d: R.v1 - R.v0, r: b.xf.r }); }
+    }
     if (ck) planCache.set(ck, { place: L.place, missing: L.missing, phi: L.phi, RESERVE: L.RESERVE, PAVE: L.PAVE });
     return best.phi;
   }
@@ -338,23 +350,52 @@ window.SQUARE_KIT = (() => {
       .concat(town ? [] : [[-10.3, -1.6, face(-1, 0), 2, 'plain'], [-10.2, 4.0, face(-1, .3), 3, 'plain'], [-10.4, -6.8, face(-1, 0), 1, 'plain']])) person(cul, r, k, u, v, f);
     });
     // a few people crossing the square, where nothing stands
-    for (const [u, v, f, k] of [[3.5, 3, 2.2, 2], [4.4, 3.6, 4.6, 3], [1.5, -5.5, 3.6, 0], [7, -5, .5, 4], [-4, 6, 1.2, 1], [-5, -6, 4, 3]]) if (!L.RESERVE.some(r => u > r.u0 - 1 && u < r.u1 + 1 && v > r.v0 - 1 && v < r.v1 + 1) && Math.abs(u) < L.s - 1 && Math.abs(v) < L.s - 1) person(cul, 'plain', k, u, v, f);
+    for (const [u, v, f, k] of [[3.5, 3, 2.2, 2], [4.4, 3.6, 4.6, 3], [1.5, -5.5, 3.6, 0], [7, -5, .5, 4], [-4, 6, 1.2, 1], [-5, -6, 4, 3]]) if (Math.abs(u) < L.s - 1 && Math.abs(v) < L.s - 1 && !Object.values(PL).some(b => inPiece(b, u, v, 1.5))) person(cul, 'plain', k, u, v, f);
 
-    // ================= the blacksmith: north edge of the square =================
-    if (PL.smith) place(PL.smith.xf, () => {
+    // ================= the blacksmith (and the stable man beside it) =================
+    if (PL.smith && PL.smith.pc.small) place(PL.smith.xf, () => {   // the small town smithy: 7 x 7 m, the counter facing the door
+      building({ name: 'Blacksmith', u0: -6, v0: -17, u1: 1, v1: -10, h: 3.8, t: .6, bands: [1.5, 3.0], roof: roofKind === 'flat' ? 'flat' : 'gable', floor: K.floorS, col: banded ? K.stone2 : wallCol, surf: banded ? 'rubble' : wallSurf,
+        ops: { S: [{ at: -2.5, w: 2.4, h: 2.8, door: true }, { at: -4.6, w: 1.0, h: 1.0, y0: 1.5 }, { at: -.2, w: 1.0, h: 1.0, y0: 1.5 }] } });
+      pb.box(-4.1, 0, -15.0, 2.0, 1.0, 2.0, K.stone2); pb.box(-4.1, .98, -15.0, 1.5, .1, 1.5, K.dark);
+      for (let k = 0; k < 5; k++) pb.sphere(-4.5 + (k % 3) * .4, 1.08, -15.3 + (k >> 1) * .3, .15, k % 2 ? K.coal : K.ember, 5, .6);
+      pb.pyramid(-4.1, 2.0, -15.0, 2.0, 1.1, K.stone2); wb.setSurf('rubble'); wb.box(-4.1, 3.0, -15.0, .8, 4.0, .8, K.stone2);
+      rectCol(-5.4, -16.4, -3.1, -14.0);
+      pb.box(-.9, 0, -13.4, 3.0, 1.05, .9, K.woodD); pb.box(-.9, 1.05, -13.4, 3.1, .06, 1.0, K.woodL); pb.box(-1.8, 1.11, -13.4, .25, .08, .5, K.steel); pb.sphere(-.3, 1.25, -13.4, .16, K.steel, 6, .9);
+      rectCol(-2.4, -13.85, .6, -12.95);
+      person(cul, 'groom', 1, -.9, -14.4, face(0, 1), { label: 'Blacksmith' });
+      pb.box(-.9, 1.3, -16.33, 2.6, 1.4, .1, K.wood); for (let k = 0; k < 4; k++) { const x = -1.8 + k * .6; pb.box(x, 1.5, -16.25, .06, .9, .05, K.woodD); pb.box(x, 2.3, -16.25, .26, .14, .07, K.iron); }
+      pb.cyl(-4.0, 0, -11.8, .3, .35, .6, K.woodD, 6); pb.box(-4.0, .6, -11.8, .9, .25, .35, K.iron); circCol(-4.0, -11.8, .55);
+      pb.box(-5.15, 0, -11.6, .5, .12, 1.6, K.wood); pb.box(-5.15, 1.0, -11.6, .5, .1, 1.6, K.wood); for (let k = 0; k < 4; k++) pb.box(-5.15, .12, -12.2 + k * .4, .05, 1.05, .07, K.steel); rectCol(-5.4, -12.4, -4.9, -10.8);
+      for (let k = 0; k < 2; k++) pb.cyl(-5.33, 2.2, -13.0 + k * 1.2, .45, .45, .06, [K.red, 0x2f4f6f][k], 12, 0, 0, Math.PI / 2);
+      pb.box(-.8, 3.15, -9.45, .08, .08, 1.0, K.iron, E); sign('Blacksmith', -.8, 2.65, -9.2, 0, 1.6, .55, '#3a2a1e', '#e8d8b0', .5);
+      lamp(-2.6, 2.3, -13.0, 0xff8a3a, 12, 9);
+      const beast = STABLE_ANIMAL[lookC] || STABLE_ANIMAL[cul] || 'horse';
+      for (const x of [-6.6, -3.8]) pb.box(x, 0, -6.4, .14, 1.1, .14, K.woodD); pb.box(-5.2, 1.0, -6.4, 3.0, .08, .08, K.woodD);
+      animal(beast, -5.2, -5.4, Math.PI / 2, 0); person(cul, 'groom', 2, -3.2, -5.0, face(0, 1), { label: 'Stables' });
+    });
+    else if (PL.smith) place(PL.smith.xf, () => {
       building({ name: 'Blacksmith', u0: -7, v0: -19, u1: 2, v1: -10, h: 4.0, t: .6, bands: [1.5, 3.0], roof: roofKind === 'flat' ? 'flat' : 'gable', floor: K.floorS, col: banded ? K.stone2 : wallCol, surf: banded ? 'rubble' : wallSurf,
         ops: { S: [{ at: -2.5, w: 2.6, h: 2.9, door: true }, { at: -5.3, w: 1.1, h: 1.0, y0: 1.5 }, { at: .5, w: 1.1, h: 1.0, y0: 1.5 }], E: [{ at: -15.5, w: 1.1, h: 1.0, y0: 1.6 }] } });
+      // the forge in the back corner, its hood and chimney
       pb.box(-5.1, 0, -16.9, 2.4, 1.0, 2.4, K.stone2); pb.box(-5.1, .98, -16.9, 1.8, .1, 1.8, K.dark);
       for (let k = 0; k < 7; k++) pb.sphere(-5.6 + (k % 3) * .5, 1.08, -17.4 + (k >> 1) * .35, .17, k % 2 ? K.coal : K.ember, 5, .6);
       pb.pyramid(-5.1, 2.0, -16.9, 2.4, 1.3, K.stone2); wb.setSurf('rubble'); wb.box(-5.1, 3.1, -16.9, .9, 4.2, .9, K.stone2); wb.box(-5.1, 7.3, -16.9, 1.1, .2, 1.1, K.stone);
       pb.box(-3.5, .9, -17.7, .5, .3, .4, K.woodD); pb.box(-3.5, 1.2, -17.7, .1, .5, .1, K.woodD);
       rectCol(-6.4, -18.4, -3.8, -15.6);
-      pb.cyl(-3.2, 0, -14.2, .3, .35, .6, K.woodD, 6); pb.box(-3.2, .6, -14.2, .9, .25, .35, K.iron); pb.cone(-2.6, .67, -14.2, .1, .4, K.iron, 4, 0, 0, -Math.PI / 2);
-      pb.cyl(-5.6, 0, -13.5, .5, .45, .7, 0x7a5236, 8); pb.cyl(-5.6, .62, -13.5, .46, .46, .03, K.water, 8);
-      pb.cyl(.4, .55, -17.6, .45, .45, .18, K.stone, 10, 0, 0, Math.PI / 2); pb.box(.4, 0, -17.6, .15, .55, .5, K.wood);
-      circCol(-3.2, -14.2, .55); circCol(-5.6, -13.5, .55); circCol(.4, -17.6, .55);
+      // the counter straight ahead of the door: the smith stands behind it, facing you as you walk in
+      pb.box(-1.0, 0, -15.0, 3.6, 1.05, .9, K.woodD); pb.box(-1.0, 1.05, -15.0, 3.7, .06, 1.0, K.woodL);
+      pb.box(-2.2, 1.11, -15.0, .25, .08, .5, K.steel); pb.box(-.2, 1.11, -15.0, .4, .14, .4, K.iron); pb.sphere(-1.2, 1.25, -15.0, .16, K.steel, 6, .9);
+      rectCol(-2.8, -15.45, .8, -14.55);
+      person(cul, 'groom', 1, -1.0, -16.0, face(0, 1), { label: 'Blacksmith' });
+      // behind him: the tool board and a rack of swords on the back wall, the grindstone
       pb.box(-1.5, 1.3, -18.33, 3.6, 1.5, .1, K.wood);
       for (let k = 0; k < 6; k++) { const x = -3 + k * .6; pb.box(x, 1.5 + (k % 2) * .2, -18.25, .06, .9, .05, K.woodD); pb.box(x, 2.3 + (k % 2) * .2, -18.25, .26, .14, .07, K.iron); }
+      pb.cyl(.6, .55, -17.6, .45, .45, .18, K.stone, 10, 0, 0, Math.PI / 2); pb.box(.6, 0, -17.6, .15, .55, .5, K.wood); circCol(.6, -17.6, .55);
+      // the anvil with the apprentice, the quench tub
+      pb.cyl(-4.2, 0, -12.6, .3, .35, .6, K.woodD, 6); pb.box(-4.2, .6, -12.6, .9, .25, .35, K.iron); pb.cone(-3.6, .67, -12.6, .1, .4, K.iron, 4, 0, 0, -Math.PI / 2); circCol(-4.2, -12.6, .55);
+      person(cul, 'plain', 3, -4.2, -13.5, face(0, 1));
+      pb.cyl(-5.2, 0, -15.0, .5, .45, .7, 0x7a5236, 8); pb.cyl(-5.2, .62, -15.0, .46, .46, .03, K.water, 8); circCol(-5.2, -15.0, .55);
+      // weapon racks along the west wall: swords and spears standing, shields and helmets above
       for (const rv of [-14.2, -11.8]) {
         pb.box(-6.15, 0, rv, .5, .12, 2.0, K.wood); pb.box(-6.15, 1.0, rv, .5, .1, 2.0, K.wood); for (const e of [-.95, .95]) pb.box(-6.15, 0, rv + e, .1, 1.15, .1, K.woodD);
         for (let k = 0; k < 5; k++) { const z = rv - .8 + k * .4; if (rv < -13) { pb.box(-6.15, .12, z, .05, 1.05, .07, K.steel); pb.box(-6.15, 1.1, z, .07, .05, .28, K.gold); } else { pb.cyl(-6.15, .12, z, .025, .03, 2.3, K.woodL, 4); pb.cone(-6.15, 2.42, z, .06, .26, K.steel, 4); } }
@@ -362,17 +403,24 @@ window.SQUARE_KIT = (() => {
       }
       for (let k = 0; k < 3; k++) pb.cyl(-6.33, 2.35, -14.6 + k * 1.3, .5, .5, .06, [K.red, 0x2f4f6f, K.gold][k], 12, 0, 0, Math.PI / 2);
       pb.box(-6.2, 1.75, -11.8, .35, .06, 2.0, K.wood); for (let k = 0; k < 3; k++) pb.sphere(-6.15, 1.95, -12.5 + k * .7, .2, K.steel, 6, .9);
-      pb.cyl(-4.2, 0, -11.2, .05, .06, 1.2, K.woodD, 4); pb.cyl(-4.2, 1.0, -11.2, .24, .3, .7, 0x6a6e72, 8); pb.box(-4.2, 1.65, -11.2, .7, .08, .08, K.woodD); circCol(-4.2, -11.2, .35);
-      pb.box(.1, 0, -13.6, .9, 1.05, 3.4, K.woodD); pb.box(.1, 1.05, -13.6, 1.0, .06, 3.5, K.woodL);
-      pb.box(.1, 1.11, -14.6, .5, .08, .25, K.steel); pb.box(.1, 1.11, -12.8, .4, .14, .4, K.iron); pb.sphere(.1, 1.25, -13.7, .16, K.steel, 6, .9);
-      rectCol(-.4, -15.3, .6, -11.9);
-      person(cul, 'groom', 1, 1.05, -13.6, face(-1, 0), { label: 'Blacksmith' });
-      person(cul, 'plain', 3, -3.9, -14.8, face(.8, .6));
+      pb.cyl(.7, 0, -11.4, .05, .06, 1.2, K.woodD, 4); pb.cyl(.7, 1.0, -11.4, .24, .3, .7, 0x6a6e72, 8); pb.box(.7, 1.65, -11.4, .7, .08, .08, K.woodD); circCol(.7, -11.4, .35);
+      // outside: the sign, an anvil and barrels
       pb.box(-.8, 3.25, -9.45, .08, .08, 1.0, K.iron, E);
       sign('Blacksmith', -.8, 2.75, -9.2, 0, 1.6, .55, '#3a2a1e', '#e8d8b0', .5);
       pb.cyl(-5.8, 0, -8.6, .25, .3, .55, K.woodD, 6); pb.box(-5.8, .55, -8.6, .8, .22, .3, K.iron); circCol(-5.8, -8.6, .5);
-      furn('barrels', 1.0, -8.8, 0, .8);
-      lamp(-4.0, 2.4, -15.2, 0xff8a3a, 14, 10);
+      furn('barrels', 1.0, -8.6, 0, .8);
+      lamp(-3.0, 2.4, -14.0, 0xff8a3a, 14, 10);
+      // the stables: just a man and his animal by the smithy, at a hitching rail with a trough
+      const beast = STABLE_ANIMAL[lookC] || STABLE_ANIMAL[cul] || 'horse';
+      if (PL.smith.pc.sv === 'front') { // out in front of the smithy, to one side of its door
+        for (const x of [-7.4, -4.6]) pb.box(x, 0, -6.4, .14, 1.1, .14, K.woodD); pb.box(-6.0, 1.0, -6.4, 3.0, .08, .08, K.woodD);
+        animal(beast, -6.0, -5.4, Math.PI / 2, 0); person(cul, 'groom', 2, -4.0, -5.0, face(0, 1), { label: 'Stables' });
+      } else {
+        pb.box(5.0, 0, -10.6, 2.4, .55, .7, K.woodD); pb.box(5.0, .53, -10.6, 2.2, .04, .5, K.water); rectCol(3.8, -10.95, 6.2, -10.25);
+        for (const x of [3.4, 6.6]) pb.box(x, 0, -9.6, .14, 1.1, .14, K.woodD); pb.box(5.0, 1.0, -9.6, 3.4, .08, .08, K.woodD);
+        animal(beast, 5.2, -8.6, Math.PI / 2, 0);
+        person(cul, 'groom', 2, 3.2, -8.0, face(0, 1), { label: 'Stables' });
+      }
     });
 
     // ================= the Venetian Quarter (cities only): an alley north to the Scuola di San Marco =================
@@ -381,7 +429,7 @@ window.SQUARE_KIT = (() => {
       townHouse(2.5, vb, 6.4, -12.5, 6.2, ['E', 'S']);
       townHouse(11.6, vb, 17.2, -12.5, 6.2, ['W', 'S']);
       if (!dV) { pb.box(7.0, 3.6, -19.5, 1.2, .12, 3.0, K.woodD); for (const z of [-20.9, -18.1]) pb.box(7.5, 3.6, z, .06, .9, .06, K.woodD); pb.box(7.5, 4.45, -19.5, .06, .06, 3.0, K.woodD); }
-      for (const [v, y] of (dV ? [[-16.2, 5.0]] : [[-16.2, 5.0], [-21.6, 4.8]])) { pb.box(9, y, v, 5.2, .02, .02, 0x3a3028); for (let k = 0; k < 4; k++) pb.box(7.3 + k * 1.1, y - .55, v, .7, .55, .03, [0xe8e0cc, 0x8a2a24, 0x2f4f6f, 0xd8c69a][k]); }
+      for (const [v, y] of (dV > 5 ? [] : dV ? [[-16.2, 5.0]] : [[-16.2, 5.0], [-21.6, 4.8]])) { pb.box(9, y, v, 5.2, .02, .02, 0x3a3028); for (let k = 0; k < 4; k++) pb.box(7.3 + k * 1.1, y - .55, v, .7, .55, .03, [0xe8e0cc, 0x8a2a24, 0x2f4f6f, 0xd8c69a][k]); }
       pb.box(9, 4.35, -12.7, 5.4, .22, .22, K.woodD);
       for (const x of [7.2, 10.8]) pb.box(x, 3.75, -12.7, .05, .6, .05, K.iron);
       sign('Venetian Quarter', 9, 3.15, -12.7, 0, 3.8, .78, '#7a1e1a', '#f0cc5a', .5);
@@ -451,28 +499,12 @@ window.SQUARE_KIT = (() => {
       lamp(-3.6, 1.6, 14.6, 0xffa050, 10, 9); lamp(.3, 3.2, 14.0, 0xffc080, 9, 10);
     });
 
-    // ================= the stables: outdoors =================
-    if (PL.stables) place(PL.stables.xf, () => {
-      const fence = (u0, v0, u1, v1) => { const L2 = Math.hypot(u1 - u0, v1 - v0), n = Math.max(1, Math.round(L2 / 2.2));
-        for (let k = 0; k <= n; k++) { const u = u0 + (u1 - u0) * k / n, v = v0 + (v1 - v0) * k / n; pb.box(u, 0, v, .16, 1.3, .16, K.woodD); }
-        const ry = Math.atan2(-(v1 - v0), u1 - u0); for (const y of [.55, 1.05]) pb.box((u0 + u1) / 2, y, (v0 + v1) / 2, L2, .1, .08, K.wood, ry); segCol(u0, v0, u1, v1, .12); };
-      fence(5, 10.6, 7.4, 10.6); fence(10.8, 10.6, 13.6, 10.6); fence(5, 10.6, 5, 15); fence(13.6, 10.6, 13.6, 15);
-      wb.setSurf(banded ? 'rubble' : wallSurf); wb.box(9.3, 0, 17.4, 9.0, 3.2, .4, banded ? K.stone2 : wallCol);
-      for (let k = 0; k <= 3; k++) pb.box(5 + k * 2.87, 0, 14.9, .22, 2.5, .22, K.woodD);
-      wb.box(9.3, 2.45, 16.15, 9.6, .16, 3.0, 0x8a6a42, 0, .2); wb.box(9.3, 2.6, 16.15, 9.6, .08, 2.9, 0xa88c52, 0, .2);
-      for (const x of [7.87, 10.73]) { pb.box(x, 0, 16.2, .12, 1.3, 2.4, K.wood); segCol(x, 15.0, x, 17.3, .1); }
-      segCol(5, 17.4, 13.6, 17.4, .25); segCol(5, 15, 5, 17.4, .12); segCol(13.6, 15, 13.6, 17.4, .12);
-      pb.box(12.4, 0, 12.6, .9, .7, 2.6, K.woodD); pb.box(12.4, .68, 12.6, .7, .04, 2.4, K.water); rectCol(11.95, 11.3, 12.85, 13.9);
-      furn('hay', 6.3, 13.0, 0, 1.1); furn('sacks', 12.6, 15.0, .6, .7);
-      pb.box(9.1, 0, 11.4, .14, 1.1, .14, K.woodD); pb.box(9.1, 1.0, 11.4, .5, .08, .08, K.woodD);
-      const beast = STABLE_ANIMAL[lookC] || STABLE_ANIMAL[cul] || 'horse';
-      animal(beast, 9.8, 12.9, Math.PI / 2, 0); animal('mule', 6.4, 16.1, Math.PI, 1); animal(beast === 'camel' || beast === 'yak' || beast === 'ox' ? 'horse' : beast, 12.1, 16.1, Math.PI, 2);
-      person(cul, 'groom', 2, 8.2, 12.0, face(0, -1), { label: 'Stables' });
-    });
-
     // ================= meshes =================
     const wm = new THREE.Mesh(wb.geometry(), bldMat); wm.castShadow = true; wm.receiveShadow = true; kit.add(wm);
     const pm = new THREE.Mesh(pb.geometry(), objMat); pm.castShadow = true; pm.receiveShadow = true; kit.add(pm);
+    // where to walk to reach each piece from the middle of the square (for tests): its front, then through its door
+    const WALK = { smith: [[-2.5, -7.5], [-2.5, PL.smith && PL.smith.pc.small ? -11.6 : -12.4]], market: [[-2.6, -1]], tavern: [[-1, 8.2], [-1, 11.8]], ven: [[9, -11.6], [9, -26.4]] };
+    kitInfo.walk = Object.entries(PL).map(([n, b]) => ({ n, pts: WALK[n].map(([u, v]) => xpt(b.xf, u, n === 'ven' && v < -20 ? v + b.pc.dV : v)) }));
     kitInfo.kit = kit; kitInfo.theta = theta; kitInfo.toWorld = toWorld; kitInfo.L = L;
     city.squareKit = kitInfo; if (!kits.includes(kitInfo)) { for (let i = kits.length - 1; i >= 0; i--) if (kits[i].city === city) kits.splice(i, 1); kits.push(kitInfo); }
     return kitInfo;

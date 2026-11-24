@@ -1209,7 +1209,7 @@
     const plaza = (x, z, w, d, ry) => { paved.push({ x, z, w, d, ry }); occ.rect(x, z, w, d, ry, 1); };
     if (KIT) {
       if (style === 'grid') for (const [ax, az, bx, bz] of [[0, -half - 4, 0, half + 4], [-half - 4, 0, half + 4, 0]]) for (const sg of kitSplit([[ax, az], [bx, bz]])) addStreet(sg, 3.6, 'avenue', false);
-      const rc = (Q, f) => f(...kitXZ((Q.u0 + Q.u1) / 2, (Q.v0 + Q.v1) / 2), Q.u1 - Q.u0, Q.v1 - Q.v0, -kTh); rc(KL.SQ, plaza); for (const Q of KL.PAVE) rc(Q, plaza); for (const Q of KL.RESERVE) rc(Q, (x, z, w, d, ry) => occ.rect(x, z, w, d, ry, 2));
+      plaza(0, 0, KL.SQ.u1 - KL.SQ.u0, KL.SQ.v1 - KL.SQ.v0, -kTh); for (const Q of KL.PAVE) plaza(...kitXZ(Q.cu, Q.cv), Q.w, Q.d, -kTh + Q.r); for (const Q of KL.RESERVE) occ.rect(...kitXZ(Q.cu, Q.cv), Q.w, Q.d, -kTh + Q.r, 2);
     } else if (style === 'grid') {
       for (const [ax, az, bx, bz] of [[0, -half - 4, 0, half + 4], [-half - 4, 0, half + 4, 0]]) addStreet([[ax, az], [bx, bz]], 3.6, 'avenue', false);
       plaza(0, 0, 16, 16, 0);
