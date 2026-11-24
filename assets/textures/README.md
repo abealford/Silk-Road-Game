@@ -34,8 +34,14 @@ One folder per texture, with these maps when the download had them:
 | Vegetation | `bark-palm`, `conifer-twig-fir`, `conifer-twig-pine` (packed sheet; only the top-left sprays are clean), `fern`, `shrub-leaves` (cards with opacity, from Poly Haven plant models) |
 | Fabrics | `fabric-linen`, `fabric-sackcloth`, `fabric-wool`, `fabric-silk`, `fabric-brocade`, `leather-brown`, `fur-fleece` |
 
+## Third pack (24 Nov 2026)
+12 CC0 textures from ambientCG, downloaded by Claude: `tile-glazed-turquoise`, `tile-mosaic-blue`, `tile-floor-pattern`, `shingles-wood`, `felt`, `rug-woven-red`, `rock-cliff-grey`, and cards with opacity `conifer-spray`, `leaves-slender`, `grass-strands`, `grass-dry-seedheads`, `pine-needles`.
+
+## Used in the game (v22.2b)
+`tools/textures/build_surfaces.py` (ground and building layers) and `tools/textures/build_veg_atlas.py` (tree cards) list which folder feeds which layer. Not used yet: `tile-mosaic-blue`, `tile-floor-pattern`, `rug-woven-red`, the fabrics, `marble-blocks`, `brick-yellow`, `wood-beams-rough`, `bamboo-wall`, `bark-palm`, `rock-red`, `rock-ochre`, `salt-flat`, `laterite`, `pebbles-river`, `moss-rock`, the grass cards and `conifer-twig-pine`.
+
 ## Still wanted
-From ambientCG (needs its download host allowed): turquoise glazed tile, wooden shingles, felt, palm leaf and bamboo leaf cards, carpets.
+A palm-leaf card and a bamboo-leaf card (neither site has one).
 
 ## Adding more
 Unzip the download, then run `python3 tools/textures/import_pack.py <folder>` after adding each new folder to the script's `MAP` (slug, description, source page). It needs `pip install OpenEXR pillow numpy` for Poly Haven's EXR maps.

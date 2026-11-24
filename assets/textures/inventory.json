@@ -84,6 +84,17 @@
   "source": "https://polyhaven.com/a/yellow_brick",
   "what": "yellow fired brick (Central Asia)"
  },
+ "conifer-spray": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "opacity.png"
+  ],
+  "source": "https://ambientcg.com/view?id=LeafSet019",
+  "what": "conifer sprays with opacity (cedar, juniper)"
+ },
  "conifer-twig-fir": {
   "license": "CC0",
   "maps": [
@@ -174,6 +185,16 @@
   "source": "https://polyhaven.com/a/caban",
   "what": "woollen cloth"
  },
+ "felt": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=Fabric034",
+  "what": "grey-white felt (steppe gers)"
+ },
  "fern": {
   "license": "CC0",
   "maps": [
@@ -219,6 +240,17 @@
   "source": "https://polyhaven.com/a/grass_medium_01",
   "what": "grass blade atlas with alpha (for grass cards)"
  },
+ "grass-dry-seedheads": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "opacity.png"
+  ],
+  "source": "https://ambientcg.com/view?id=Foliage002",
+  "what": "dry grass with seed heads, opacity (steppe tufts)"
+ },
  "grass-sparse-dry": {
   "license": "CC0",
   "maps": [
@@ -229,6 +261,17 @@
   ],
   "source": "https://polyhaven.com/a/leafy_grass",
   "what": "sparse dry grass and earth"
+ },
+ "grass-strands": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "opacity.png"
+  ],
+  "source": "https://ambientcg.com/view?id=Foliage001",
+  "what": "grass and reed strands with opacity"
  },
  "ground-grass-patchy": {
   "license": "CC0",
@@ -283,6 +326,17 @@
   ],
   "source": "https://ambientcg.com/view?id=LeafSet024",
   "what": "broadleaf leaf set with opacity"
+ },
+ "leaves-slender": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "opacity.png"
+  ],
+  "source": "https://ambientcg.com/view?id=LeafSet013",
+  "what": "long slender leaves with opacity (bamboo, willow, oleander)"
  },
  "loess": {
   "license": "CC0",
@@ -394,6 +448,17 @@
   "source": "https://polyhaven.com/a/dry_river_pebbles",
   "what": "river pebbles (banks, fords)"
  },
+ "pine-needles": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "opacity.png"
+  ],
+  "source": "https://ambientcg.com/view?id=PineNeedles001",
+  "what": "loose pine needles with opacity"
+ },
  "plaster-mud": {
   "license": "CC0",
   "maps": [
@@ -426,6 +491,17 @@
   ],
   "source": "https://polyhaven.com/a/white_plaster_02",
   "what": "white lime plaster"
+ },
+ "rock-cliff-grey": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=Rock028",
+  "what": "grey cliff rock"
  },
  "rock-cliff-layered": {
   "license": "CC0",
@@ -504,6 +580,17 @@
   "source": "https://polyhaven.com/a/clay_roof_tiles_02",
   "what": "orange barrel roof tiles"
  },
+ "rug-woven-red": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=Carpet015",
+  "what": "red-orange woven rug"
+ },
  "salt-flat": {
   "license": "CC0",
   "maps": [
@@ -547,6 +634,15 @@
   ],
   "source": "https://polyhaven.com/a/rocky_trail",
   "what": "tan gravel and scree"
+ },
+ "shingles-wood": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=WoodSiding011",
+  "what": "wooden shingles (Caucasus, mountains)"
  },
  "shrub-leaves": {
   "license": "CC0",
@@ -631,6 +727,38 @@
   ],
   "source": "https://polyhaven.com/a/reed_roof_04",
   "what": "reed thatch roof"
+ },
+ "tile-floor-pattern": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=Tiles131",
+  "what": "patterned floor tiles (courtyards, palaces)"
+ },
+ "tile-glazed-turquoise": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=Tiles020",
+  "what": "turquoise glazed tiles (Persia, Central Asia)"
+ },
+ "tile-mosaic-blue": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=Tiles070",
+  "what": "dark blue hexagonal glazed mosaic"
  },
  "tree-island-01/branches": {
   "license": "CC0",

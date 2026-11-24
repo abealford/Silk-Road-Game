@@ -78,6 +78,19 @@ MAP = {
     'floral_jacquard_1k': ('fabric-brocade', 'floral brocade', 'https://polyhaven.com/a/floral_jacquard'),
     'brown_leather_1k': ('leather-brown', 'brown leather', 'https://polyhaven.com/a/brown_leather'),
     'curly_teddy_natural_1k': ('fur-fleece', 'curly fleece (sheepskin)', 'https://polyhaven.com/a/curly_teddy_natural'),
+    # third pack (24 Nov 2026), downloaded by Claude from ambientCG
+    'Tiles020_1K-JPG': ('tile-glazed-turquoise', 'turquoise glazed tiles (Persia, Central Asia)', 'https://ambientcg.com/view?id=Tiles020'),
+    'Tiles070_1K-JPG': ('tile-mosaic-blue', 'dark blue hexagonal glazed mosaic', 'https://ambientcg.com/view?id=Tiles070'),
+    'Tiles131_1K-JPG': ('tile-floor-pattern', 'patterned floor tiles (courtyards, palaces)', 'https://ambientcg.com/view?id=Tiles131'),
+    'WoodSiding011_1K-JPG': ('shingles-wood', 'wooden shingles (Caucasus, mountains)', 'https://ambientcg.com/view?id=WoodSiding011'),
+    'Fabric034_1K-JPG': ('felt', 'grey-white felt (steppe gers)', 'https://ambientcg.com/view?id=Fabric034'),
+    'Carpet015_1K-JPG': ('rug-woven-red', 'red-orange woven rug', 'https://ambientcg.com/view?id=Carpet015'),
+    'Rock028_1K-JPG': ('rock-cliff-grey', 'grey cliff rock', 'https://ambientcg.com/view?id=Rock028'),
+    'LeafSet019_1K-JPG': ('conifer-spray', 'conifer sprays with opacity (cedar, juniper)', 'https://ambientcg.com/view?id=LeafSet019'),
+    'LeafSet013_1K-JPG': ('leaves-slender', 'long slender leaves with opacity (bamboo, willow, oleander)', 'https://ambientcg.com/view?id=LeafSet013'),
+    'Foliage001_1K-JPG': ('grass-strands', 'grass and reed strands with opacity', 'https://ambientcg.com/view?id=Foliage001'),
+    'Foliage002_1K-JPG': ('grass-dry-seedheads', 'dry grass with seed heads, opacity (steppe tufts)', 'https://ambientcg.com/view?id=Foliage002'),
+    'PineNeedles001_1K-JPG': ('pine-needles', 'loose pine needles with opacity', 'https://ambientcg.com/view?id=PineNeedles001'),
     'island_tree_01_1k': ('tree-island-01', 'a tree model\'s textures: trunk, branches, leaves with alpha (the .blend model itself is not imported)', 'https://polyhaven.com/a/island_tree_01'),
 }
 
