@@ -1,4 +1,15 @@
 {
+ "bamboo-wall": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/bamboo_wall",
+  "what": "bamboo wall (south China)"
+ },
  "bark-pale": {
   "license": "CC0",
   "maps": [
@@ -8,6 +19,17 @@
   ],
   "source": "https://polyhaven.com/a/tree_bark_03",
   "what": "pale bark with moss (poplar, beech)"
+ },
+ "bark-palm": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/palm_bark",
+  "what": "palm trunk bark"
  },
  "bark-pine": {
   "license": "CC0",
@@ -29,6 +51,63 @@
   "source": "https://polyhaven.com/a/sakura_bark",
   "what": "smooth brown bark (fruit trees, broadleaf)"
  },
+ "brick-byzantine": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/medieval_red_brick",
+  "what": "thin dark red brick (Byzantine)"
+ },
+ "brick-grey": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/brick_wall_08",
+  "what": "grey brick (China)"
+ },
+ "brick-yellow": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/yellow_brick",
+  "what": "yellow fired brick (Central Asia)"
+ },
+ "conifer-twig-fir": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg",
+   "opacity.png"
+  ],
+  "source": "https://polyhaven.com/a/fir_tree_01",
+  "what": "fir needle twig card with alpha"
+ },
+ "conifer-twig-pine": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg",
+   "opacity.png"
+  ],
+  "source": "https://polyhaven.com/a/pine_tree_01",
+  "what": "pine needle twig card with alpha"
+ },
  "dry-earth": {
   "license": "CC0",
   "maps": [
@@ -39,6 +118,73 @@
   ],
   "source": "https://ambientcg.com/view?id=Ground111",
   "what": "dry reddish earth and gravel"
+ },
+ "fabric-brocade": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/floral_jacquard",
+  "what": "floral brocade"
+ },
+ "fabric-linen": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/rough_linen",
+  "what": "rough linen"
+ },
+ "fabric-sackcloth": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/hessian_230",
+  "what": "hessian / sackcloth"
+ },
+ "fabric-silk": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/crepe_satin",
+  "what": "silk satin"
+ },
+ "fabric-wool": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/caban",
+  "what": "woollen cloth"
+ },
+ "fern": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg",
+   "opacity.png"
+  ],
+  "source": "https://polyhaven.com/a/fern_02",
+  "what": "fern fronds with alpha"
  },
  "forest-floor-leaves": {
   "license": "CC0",
@@ -51,6 +197,17 @@
   "source": "https://ambientcg.com/view?id=ScatteredLeaves008",
   "what": "autumn leaves on the ground"
  },
+ "fur-fleece": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/curly_teddy_natural",
+  "what": "curly fleece (sheepskin)"
+ },
  "grass-blades": {
   "license": "CC0",
   "maps": [
@@ -61,6 +218,17 @@
   ],
   "source": "https://polyhaven.com/a/grass_medium_01",
   "what": "grass blade atlas with alpha (for grass cards)"
+ },
+ "grass-sparse-dry": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/leafy_grass",
+  "what": "sparse dry grass and earth"
  },
  "ground-grass-patchy": {
   "license": "CC0",
@@ -83,6 +251,28 @@
   "source": "https://ambientcg.com/view?id=Ground003",
   "what": "grass and dirt meadow ground"
  },
+ "laterite": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/red_laterite_soil_stones",
+  "what": "red laterite soil (south China, India)"
+ },
+ "leather-brown": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/brown_leather",
+  "what": "brown leather"
+ },
  "leaves-broadleaf": {
   "license": "CC0",
   "maps": [
@@ -93,6 +283,72 @@
   ],
   "source": "https://ambientcg.com/view?id=LeafSet024",
   "what": "broadleaf leaf set with opacity"
+ },
+ "loess": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/forrest_ground_03",
+  "what": "pale yellow earth (loess, north China)"
+ },
+ "marble-blocks": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/marble_01",
+  "what": "pale marble blocks (Byzantine)"
+ },
+ "moss-rock": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/mossy_rock",
+  "what": "mossy rock (damp forests)"
+ },
+ "mud-brick-rough": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/rough_plaster_brick_02",
+  "what": "rough brick with mud plaster"
+ },
+ "mud-cracked": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/mud_cracked_dry_03",
+  "what": "cracked dry mud (desert)"
+ },
+ "mud-wall-cracked": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/clay_block_wall",
+  "what": "cracked mud wall (Persia, Central Asia)"
  },
  "paving-fan": {
   "license": "CC0",
@@ -127,6 +383,138 @@
   "source": "https://ambientcg.com/view?id=PavingStones138",
   "what": "stone setts in rows"
  },
+ "pebbles-river": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/dry_river_pebbles",
+  "what": "river pebbles (banks, fords)"
+ },
+ "plaster-mud": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/clay_plaster",
+  "what": "brown mud render"
+ },
+ "plaster-over-brick": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/damaged_plaster",
+  "what": "worn plaster showing brick (Byzantine)"
+ },
+ "plaster-white": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/white_plaster_02",
+  "what": "white lime plaster"
+ },
+ "rock-cliff-layered": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/cliff_side",
+  "what": "brown layered sedimentary cliff"
+ },
+ "rock-cliff-pale": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/rock_face_03",
+  "what": "pale limestone cliff face"
+ },
+ "rock-dark-lichen": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/lichen_rock",
+  "what": "dark rock with lichen (Caucasus, north)"
+ },
+ "rock-ochre": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/sandstone_cracks",
+  "what": "ochre sandstone (Tarim, desert)"
+ },
+ "rock-red": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/tiger_rock",
+  "what": "red-brown rock (Anatolia, Persia)"
+ },
+ "roof-tiles-grey": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/roof_tiles_14",
+  "what": "dark grey roof tiles (China)"
+ },
+ "roof-tiles-terracotta": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/clay_roof_tiles_02",
+  "what": "orange barrel roof tiles"
+ },
+ "salt-flat": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/dry_ground_01",
+  "what": "grey cracked flat (salt pans, Lop Nur)"
+ },
  "sand": {
   "license": "CC0",
   "maps": [
@@ -137,6 +525,62 @@
   ],
   "source": "https://ambientcg.com/view?id=Ground080",
   "what": "rippled desert sand"
+ },
+ "sandstone-red": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/red_sandstone_wall",
+  "what": "red sandstone wall (India)"
+ },
+ "scree": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/rocky_trail",
+  "what": "tan gravel and scree"
+ },
+ "shrub-leaves": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg",
+   "opacity.png"
+  ],
+  "source": "https://polyhaven.com/a/shrub_02",
+  "what": "shrub leaves with alpha"
+ },
+ "snow": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/snow_02",
+  "what": "clean packed snow"
+ },
+ "steppe-dry": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/withered_grass",
+  "what": "pale withered grass (steppe)"
  },
  "stone-ashlar-grey": {
   "license": "CC0",
@@ -218,6 +662,17 @@
   ],
   "source": "https://polyhaven.com/a/island_tree_01",
   "what": "a tree model's textures: trunk, branches, leaves with alpha (the .blend model itself is not imported) \u2014 trunk"
+ },
+ "wood-beams-rough": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://polyhaven.com/a/rough_wood",
+  "what": "rough weathered beam"
  },
  "wood-boards-studded": {
   "license": "CC0",
