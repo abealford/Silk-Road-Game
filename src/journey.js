@@ -266,20 +266,32 @@
 
   // ---------------- vendors ----------------
   const NAMES = {
-    byz: ['Theodore', 'Michael', 'Nikephoros', 'Ioannes', 'Alexios', 'Demetrios'], armenian: ['Hovhannes', 'Smbat', 'Grigor', 'Vahram'], georgian: ['Giorgi', 'Davit', 'Shota', 'Zakaria'],
+    byz: ['Theodore', 'Michael', 'Nikephoros', 'Ioannes', 'Alexios', 'Demetrios', 'Konstantinos', 'Georgios', 'Basil', 'Stephanos', 'Manuel'], armenian: ['Hovhannes', 'Smbat', 'Grigor', 'Vahram'], georgian: ['Giorgi', 'Davit', 'Shota', 'Zakaria'],
     rum: ['Hasan', 'Mahmud', 'Osman', 'Yusuf', 'Ali'], arab: ['Abu Bakr', 'Khalil', 'Ibrahim', 'Salah', 'Umar'], persian: ['Rashid', 'Hamid', 'Farrukh', 'Jalal', 'Kamal'],
     central: ['Nasir', 'Timur', 'Mas\'ud', 'Bahadur', 'Qutb'], tarim: ['Arslan', 'Bilge', 'Qutlugh', 'Tughril'], mongol: ['Temür', 'Bayan', 'Arghun', 'Nogai', 'Sübe'],
     chinese: ['Wang', 'Zhang', 'Liu', 'Chen', 'Zhao', 'Li'], song: ['Wu', 'Shen', 'Lu', 'Fang', 'Gu'], tibet: ['Tashi', 'Dorje', 'Pema', 'Sonam', 'Norbu'],
     yemen: ['Ahmad', 'Salim', 'Hasan al-Hadrami', 'Ali', 'Muhsin'], indian: ['Jagadu', 'Vastupala', 'Somadeva', 'Haridasa', 'Ramadeva', 'Bhima'], sea: ['Nga Pyi', 'Aung', 'Pho Khun', 'Chandra', 'Kyaw', 'Sri Ratna'],
   };
-  const ROLES = { merchant: 'merchant', outfitter: 'stable-master', guild: 'master of the Merchants\' Guild' };
+  const ROLES = { merchant: 'merchant', outfitter: 'stable-master', guild: 'master of the Merchants\' Guild', smith: 'blacksmith', innkeeper: 'innkeeper', broker: 'broker' };
+  const SPOT = { merchant: 'Merchant', outfitter: 'Stables', smith: 'Blacksmith', guild: 'Scuola di San Marco', scuola: 'Scuola di San Marco', innkeeper: 'Innkeeper', broker: 'Broker' };   // v22.3: square NPC per role
   const vendorSets = new Map(); // cityId -> {group, vendors:[{role,x,z,name,obj}]}
   function spawnVendors(c) {
     if (vendorSets.has(c.id) || !c.occ) return;
     const g = new THREE.Group(); g.position.set(c.x, c.h, c.z); H.scene.add(g);
     const vendors = []; const used = [];
     const dMain = (x, z) => { let m = 1e9; for (const l of c.corrLines) for (const p of l) m = Math.min(m, Math.hypot(p[0] - x, p[1] - z)); return m; };
-    for (const role of vendorRoles(c)) {
+    // v22.3: the town square's people are the vendors (src/square_kit.js). The smith sells arms and upgrades, the stables
+    // animals, carts and men; the innkeeper has the town news; the Scuola di San Marco's master is also the guild.
+    const K = c.squareKit && c.squareKit.spots; let roles = vendorRoles(c); let both = false;
+    if (K) {
+      if (roles.includes('outfitter') && K.Blacksmith) roles.push('smith');
+      if (K.Innkeeper) roles.push('innkeeper'); if (K.Broker) roles.push('broker');
+      if (roles.includes('scuola') && roles.includes('guild') && K[SPOT.scuola]) { roles = roles.filter(r => r !== 'guild'); both = true; }
+    }
+    const nameFor = role => { const nl = (NAMES[c.culture] || NAMES.persian).filter(n => !vendors.some(v => v.name === n)); let hs = 0; for (const ch of c.id + role + ((S && S.seed) || '')) hs = (hs * 31 + ch.charCodeAt(0)) >>> 0; if (nl.length) return nl[hs % nl.length]; const all = Object.values(NAMES).flat().filter(n => !vendors.some(v => v.name === n)); return all[hs % all.length]; };
+    for (const role of roles) {
+      const n = K && K[SPOT[role]];
+      if (n) { const [x, z] = c.squareKit.toWorld(n.u, n.v); vendors.push({ role, x, z, name: nameFor(role), obj: n.obj, label: n.label || { visible: true }, kit: true, spot: SPOT[role], both: role === 'scuola' && both }); used.push([x - c.x, z - c.z]); continue; }
       let best = null;
       for (let k = 0; k < 72; k++) for (const r of (role.startsWith('quarter') ? [16, 19, 22, 25].filter(r => r < c.R - 3) : [6.5, 8, 10, 12, 14])) {
         const a = k / 72 * Math.PI * 2; const x = Math.cos(a) * r, z = Math.sin(a) * r; const bx = Math.cos(a) * (r + 1.8), bz = Math.sin(a) * (r + 1.8);
@@ -296,12 +308,11 @@
       const sm = new THREE.Mesh(sb.geometry(), H.objMat); sm.castShadow = true; g.add(sm);
       if (role === 'outfitter') { const an = makeAnimal(pickAnimalFor(c), true); an.position.set(Math.cos(best.a + .35) * (best.r + 1), 0, Math.sin(best.a + .35) * (best.r + 1)); an.rotation.y = best.a + Math.PI / 2; g.add(an); }
       const label = textSprite(vendorLabel(role)); label.position.set(best.x, 3.05, best.z); g.add(label);
-      const nl = (NAMES[c.culture] || NAMES.persian).filter(n => !vendors.some(v => v.name === n)); let hs = 0; for (const ch of c.id + role + ((S && S.seed) || '')) hs = (hs * 31 + ch.charCodeAt(0)) >>> 0;
-      const name = nl.length ? nl[hs % nl.length] : pick(NAMES.persian); // v15.1: three different people, the same ones every visit
+      const name = nameFor(role); // v15.1: three different people, the same ones every visit
       vendors.push({ role, x: c.x + best.x, z: c.z + best.z, name, obj: person, label });
       if (!c._vcol) H.addCollider({ x: c.x + best.x, z: c.z + best.z, r: 0.45 });
     }
-    c._vcol = true; vendorSets.set(c.id, { group: g, vendors, city: c });
+    c._vcol = true; vendorSets.set(c.id, { group: g, vendors, city: c })
   }
   function pickAnimalFor(c) { return c.culture === 'sea' || (c.culture === 'indian' && c.lat < 26 && c.lon > 74.5) ? 'elephant' : c.culture === 'indian' ? 'ox' : ['arab', 'persian', 'central', 'tarim', 'yemen'].includes(c.culture) ? 'camel' : c.culture === 'tibet' ? 'yak' : c.culture === 'mongol' ? 'pony' : ['chinese', 'song'].includes(c.culture) ? 'mule' : 'horse'; }
   function cleanupVendors() {
@@ -372,7 +383,11 @@
       const tabs = `<div class="mx-tabs">${[['market', 'Market'], ['provisions', 'Provisions'], ['news', 'Town news']].filter(t => t[0] !== 'news' || unl('news')).map(([k, n]) => `<button data-act="mtab" data-t="${k}" class="${t === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
       return head(title, sub) + tabs + (t === 'provisions' ? renderSupplies(c) : t === 'news' ? renderTownNews(c) : renderMarket(c)); }
     if (v.role === 'guild') return head(title, sub) + renderGuild(c);
-    return head(title, sub) + renderOutfitter(c);
+    // v22.3: the town square splits the old stable-master: the smith sells arms and upgrades, the stables animals, carts and men
+    if (v.role === 'smith') return head(title, sub) + renderOutfitter(c, ['arms', 'speed', 'special']);
+    if (v.role === 'innkeeper') return head(title, sub) + (unl('news') ? renderTownNews(c) : '<p class="mx-dim">"Travellers come and go. Ask me again when you know the road a little better."</p>');
+    if (v.role === 'broker') return head(title, sub) + '<p class="mx-dim">The broker knows who needs goods carried, and where. (More from him in a later build.)</p>' + renderContracts(c);
+    return head(title, sub) + renderOutfitter(c, v.kit ? ['animals', 'wheels', 'hire'] : null);
   }
   function renderMarket(c) {
     const st = S.stock[c.id] || { q: {} };
@@ -484,9 +499,11 @@
       camel: ['arab', 'persian', 'central', 'tarim', 'mongol', 'yemen'].includes(cul) || (cul === 'indian' && c.lon < 77.5 && c.lat > 22) || (cul === 'chinese' && north && c.lon < 112) || c.id === 'hormuz', yak: cul === 'tibet' || c.id === 'xining' || c.id === 'kathmandu', elephant: cul === 'sea' || (cul === 'indian' && c.lon > 74.5 && c.id !== 'kathmandu') };
     return M[kind];
   }
-  function renderOutfitter(c) {
-    const tab = panelState.otab || 'animals';
-    let h = `<div class="mx-tabs">${[['animals', 'Pack animals'], ['speed', 'Speed'], ['wheels', 'Carts'], ['hire', 'Hire men'], ['arms', 'Arms'], ['special', 'Other']].map(([k, n]) => `<button data-act="otab" data-t="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+  function renderOutfitter(c, only) {
+    const TABS = [['animals', 'Pack animals'], ['speed', 'Speed'], ['wheels', 'Carts'], ['hire', 'Hire men'], ['arms', 'Arms'], ['special', 'Other']].filter(t => !only || only.includes(t[0]));
+    if (!TABS.some(t => t[0] === panelState.otab)) panelState.otab = TABS[0][0];
+    const tab = panelState.otab;
+    let h = `<div class="mx-tabs">${TABS.map(([k, n]) => `<button data-act="otab" data-t="${k}" class="${tab === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
     const row = (name, desc, price, btns) => `<tr><td><b>${name}</b><br><span class="mx-dim">${desc}</span></td><td>${price}</td><td>${btns}</td></tr>`;
     h += '<table class="mx-tb wide">';
     if (tab === 'animals') {
@@ -1347,6 +1364,7 @@
     switch (a) {
       case 'gtab': panelState.gtab = d.t; return true;
       case 'mtab': panelState.mtab = d.t; return true;
+      case 'stab': panelState.stab = d.t; return true;
       case 'vinvest': { const amt = +d.a; if (S.coins < amt) return true; const o = ventureOffers(c).find(o => o.risk === d.r); const R = RISKS[o.risk]; S.coins -= amt; const win = rnd() < R.p;
         (S.inv = S.inv || []).push({ id: 'v' + Math.floor(rnd() * 1e9), oid: c.id + Math.floor(S.day / 20) + o.risk, from: c.id, to: o.to, g: o.g, risk: o.risk, amt, mult: o.mult, fail: R.fail, win, start: S.day, end: S.day + o.days, told: false });
         H.showToast('Commenda', `You back a caravan carrying ${lcName(GOOD[o.g].name)} to ${W.cityById[o.to].name} with ${fmt(amt)} ${CURRENCY}. It should be back in about ${o.days} days.`, 'Guild'); return true; }
@@ -1853,15 +1871,17 @@
   };
   const PORTS = new Set(SEA_LANES.flatMap(l => [l[0], l[1]]));
   const ITALIANS = { venice: ['Marino', 'Pietro', 'Giacomo', 'Andrea', 'Nicolò', 'Lorenzo'], genoa: ['Benedetto', 'Simone', 'Lanfranco', 'Ugolino', 'Oberto', 'Guglielmo'] };
-  function vendorLabel(role) { if (role.startsWith('quarter_')) return FACTIONS[role.slice(8)].quarter; return { merchant: 'Merchant', outfitter: 'Stables & Hiring', guild: 'Merchants\' Guild', harbour: 'Harbour master', scuola: 'Scuola di San Marco' }[role] || role; }
+  function vendorLabel(role) { if (role.startsWith('quarter_')) return FACTIONS[role.slice(8)].quarter; return { merchant: 'Merchant', outfitter: 'Stables & Hiring', guild: 'Merchants\' Guild', harbour: 'Harbour master', scuola: 'Scuola di San Marco', smith: 'Blacksmith', innkeeper: 'Innkeeper', broker: 'Broker' }[role] || role; }
   { const o = vendorRoles; vendorRoles = function (c) { const r = o(c); if (!c) return r; if (unl('ships') && PORTS.has(c.id)) r.push('harbour'); if (unl('factions')) for (const f of facsIn(c.id)) r.push('quarter_' + f); return r; }; }
   { const o = spawnVendors; spawnVendors = function (c) { const had = vendorSets.has(c.id); o(c); if (had) return; const vs = vendorSets.get(c.id); if (!vs) return;
-    for (const v of vs.vendors) { if (v.role === 'scuola') { let h = 0; for (const ch of c.id + 'sc') h = (h * 31 + ch.charCodeAt(0)) >>> 0; v.name = c.id === 'constantinople' ? 'Ser Bartolomeo Ghisi' : SCUOLA_NAMES[h % SCUOLA_NAMES.length]; } const f = v.role.startsWith('quarter_') && v.role.slice(8); if (f && ITALIANS[f]) { let h = 0; for (const ch of c.id + f + (S.seed || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0; v.name = ITALIANS[f][h % ITALIANS[f].length]; } } }; }
+    for (const v of vs.vendors) { if (v.role === 'scuola' || v.spot === 'Scuola di San Marco') { let h = 0; for (const ch of c.id + 'sc') h = (h * 31 + ch.charCodeAt(0)) >>> 0; v.name = c.id === 'constantinople' ? 'Ser Bartolomeo Ghisi' : SCUOLA_NAMES[h % SCUOLA_NAMES.length]; } const f = v.role.startsWith('quarter_') && v.role.slice(8); if (f && ITALIANS[f]) { let h = 0; for (const ch of c.id + f + (S.seed || '')) h = (h * 31 + ch.charCodeAt(0)) >>> 0; v.name = ITALIANS[f][h % ITALIANS[f].length]; } } }; }
   { const o = renderVendor; renderVendor = function () { const v = panelState.vendor; const c = W.cityById[nearestCityId()];
     const title = `${v.name}, ${ROLES[v.role]}`; const sub = `${c.name} · ${REALMS[ECON.realmOf(c.id)].name}`;
     if (v.role === 'harbour') return head(title, sub) + renderHarbour(c);
     if (v.role.startsWith('quarter_')) return head(title, sub) + renderQuarter(c, v.role.slice(8));
-    if (v.role === 'scuola') return head(title, sub) + renderScuola(c);
+    if (v.role === 'scuola') { if (!v.both) return head(title, sub) + renderScuola(c);
+      const t = panelState.stab || 'scuola'; const tabs = `<div class="mx-tabs">${[['scuola', 'Scuola di San Marco'], ['guild', 'Merchants\' guild']].map(([k, n]) => `<button data-act="stab" data-t="${k}" class="${t === k ? 'on' : ''}">${n}</button>`).join('')}</div>`;
+      return head(title, sub) + tabs + (t === 'guild' ? renderGuild(c) : renderScuola(c)); }
     return o(); }; }
 
   // ---------------- sea lanes ----------------
@@ -2162,7 +2182,7 @@
   H.compassMarks = () => { const c = H.getCity(); const vs = c && vendorSets.get(c.id); const out = []; if (vs) for (const v of vs.vendors) if (v.role === 'harbour' && Math.hypot(v.x - H.player.x, v.z - H.player.z) > 5) out.push({ x: v.x, z: v.z, c: '#2a5a8a', t: '⚓' }); return out; };
   { const o = H.mapCityInfo; H.mapCityInfo = c => { const q = questPins().filter(q => q.city === c.id); return (q.length ? `<div class="mx-qpins">${q.map(q => `<div><span style="color:${q.color}">⚑</span> ${q.text}</div>`).join('')}</div>` : '') + (o ? o(c) : ''); }; }
   // the model kit, for the third-person view
-  Object.assign(H.lifeKit, { makePerson: (...a) => { W = W || H.W; B = B || H.B; return makePerson(...a); }, makeAnimal: (...a) => { W = W || H.W; B = B || H.B; return makeAnimal(...a); }, animate });
+  Object.assign(H.lifeKit, { textSprite: t => textSprite(t), makePerson: (...a) => { W = W || H.W; B = B || H.B; return makePerson(...a); }, makeAnimal: (...a) => { W = W || H.W; B = B || H.B; return makeAnimal(...a); }, animate });
   H.canJump = () => !voy && !ui;
   // what the admin tools reach inside the journey
   H.J = { get S() { return S; }, get MODE() { return MODE; }, get ui() { return ui; }, get voy() { return voy; }, M, EVENTS,
@@ -2183,7 +2203,7 @@
     const moved = updateTrail(); placeFollowers(moved);
     if (mountView) { mountView.position.y = moved > 0 ? Math.sin(H.player.bob * 1.4) * .04 : 0; }
     updateRoadCaravans(dt); updateTownsfolk(dt);
-    if (vendorSets.size) for (const v of vendorSets.values()) for (const vd of v.vendors) { const o = vd.obj; const dx = H.player.x - vd.x, dz = H.player.z - vd.z; vd.label.visible = dx * dx + dz * dz > 30; if (dx * dx + dz * dz < 100) { let dy = Math.atan2(dx, dz) - o.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); o.rotation.y += dy * .1; } }
+    if (vendorSets.size) for (const v of vendorSets.values()) for (const vd of v.vendors) { if (vd.kit) continue; const o = vd.obj; const dx = H.player.x - vd.x, dz = H.player.z - vd.z; vd.label.visible = dx * dx + dz * dz > 30; if (dx * dx + dz * dz < 100) { let dy = Math.atan2(dx, dz) - o.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); o.rotation.y += dy * .1; } }
     slowT -= dt; if (slowT < 0) { slowT = .25; const c = H.getCity(); if (c) spawnVendors(c); cleanupVendors(); findInteraction(); updatePrompt(); }
     updateHud();
   };

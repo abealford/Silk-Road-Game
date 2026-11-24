@@ -290,7 +290,7 @@
     try {
       const p = H.player, W = H.W; const ri = { calls, triangles: tris }; const [lon, lat] = W.toLL(p.x, p.z); const nc = W.nearestCity(p.x, p.z);
       const cid = nc.c.id; const s = S(); const realm = typeof ECON !== 'undefined' && ECON.realmOf ? ECON.realmOf(cid) : '';
-      dbg.textContent = [`FPS ${fps.toFixed(0)}`, `draw calls ${ri.calls || 0}   tris ${fmt(ri.triangles || 0)}`, `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)}   ${lat.toFixed(2)}°N ${lon.toFixed(2)}°E`,
+      dbg.textContent = [`FPS ${fps.toFixed(0)}`, `draw calls ${ri.calls || 0}   tris ${fmt(ri.triangles || 0)}`, ...(window.KITS ? [`kit cells ${KITS.stats.shown} near / ${KITS.stats.built} built   kit tris ${fmt(KITS.stats.tris)}`] : []), `pos ${p.x.toFixed(0)}, ${p.z.toFixed(0)}   ${lat.toFixed(2)}°N ${lon.toFixed(2)}°E`,
         `near ${cityName(cid)} (${nc.d.toFixed(0)} u)${H.getCity() ? ' · inside' : ''}`, `realm ${realm}${typeof MARKET !== 'undefined' ? '   market ' + (MARKET.of(cid) || '-') : ''}`,
         s ? `day ${s.day.toFixed(1)}   act ${s.camp ? s.camp.act : '-'}   seed ${s.seed}` : 'free roam', s ? `km ${fmt(s.kmTotal)}   cool ${Math.round(s.cool)}   events ${s.events}` : '', `view ${window.__view ? (window.__view.state().want3p ? 'third' : 'first') : ''} person   noclip ${F.noclip ? 'on' : 'off'}   walk ${F.walk}×`].filter(Boolean).join('\n');
     } catch (e) { dbg.textContent = 'debug: ' + e.message; }
