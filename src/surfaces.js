@@ -3,8 +3,9 @@
 //  SURFACES (v22.2): real textures on the ground, roads and buildings
 // ============================================================
 // Two WebGL2 texture arrays built from src/surfaces_data.js (tools/textures/build_surfaces.py):
-//   GROUND  meadow, patchy, sand, earth, forest, rock, setts, flags, fan
-//   BUILD   plaster, mudbrick, brick, tile, stoneWarm, rubble, ashlar, slate, planks, boards, thatch, felt
+//   GROUND  meadow, patchy, sand, earth, forest, rock, setts, flags, fan, snow, cracked, scree, steppe, loess
+//   BUILD   plaster, mudbrick, brick, tile, stoneWarm, rubble, ashlar, slate, planks, boards, thatch, felt,
+//           tileGrey, glazed, shingles, mudwall, brickGrey, sandstoneRed (v22.2b)
 // Each layer has a colour map, a normal map, its mean linear colour and (1/metres per tile, detail k, own colour).
 // Shading keeps the vertex colour in charge: colour = vertex colour * (texture / mean), blended toward the
 // texture's own colour by `own`. So region, culture and season palettes still decide the colour, and the
@@ -80,20 +81,21 @@ const SURF = (() => {
     const slope = Math.abs(ny) > 0.12 && Math.abs(ny) < 0.97, flat = Math.abs(ny) >= 0.97;
     const L = (n) => (Bn[n] === undefined ? 0 : Bn[n] + 1);
     if (v < 0.24) return 0;                                             // openings, shadows, ironwork
-    if (s > 0.42 && h > 58 && h < 335) return 0;                        // paint, glazed tile, cloth, foliage
+    if (s > 0.42 && h >= 165 && h < 212 && v > 0.32) return L('glazed'); // v22.2b: turquoise glazed tile (domes, portals, minarets)
+    if (s > 0.42 && h > 58 && h < 335) return 0;                        // paint, cloth, foliage
     if (wall === 'felt') return s < 0.5 && v > 0.55 ? L('felt') : 0;
     if (h < 30 && s > 0.42 && (v >= 0.5 || s > 0.7)) {                 // reds and terracotta (dark browns are timber, below)
       if (slope) return L('tile');
       return s > 0.7 ? L('planks') : L('brick');                        // lacquered posts / fired brick
     }
     if (s < 0.14) {                                                     // greys
-      if (slope) return v < 0.45 ? L('tile') : 0;                       // grey roof tiles; lead domes stay plain
+      if (slope) return v < 0.45 ? L('tileGrey') : 0;                   // grey roof tiles; lead domes stay plain
       if (flat) return L(v < 0.4 ? 'slate' : 'ashlar');
-      return v < 0.4 ? L('slate') : wall === 'plaster' && v > 0.8 ? L('plaster') : L('ashlar');
+      return v < 0.4 ? L('slate') : wall === 'plaster' && v > 0.8 ? L('plaster') : wall === 'brickGrey' ? L('brickGrey') : L('ashlar');
     }
-    if (h < 48 && s >= 0.35 && v < 0.6) return L(v < 0.4 ? 'boards' : 'planks');               // timber
+    if (h < 48 && s >= 0.35 && v < 0.6) return slope && (wall === 'ashlar' || wall === 'rubble') ? L('shingles') : L(v < 0.4 ? 'boards' : 'planks'); // timber; Caucasus roofs are shingled
     if (h >= 32 && h < 55 && s >= 0.33 && s < 0.62 && slope && v >= 0.45 && v < 0.72) return L('thatch'); // thatch and reed roofs
-    if (v >= 0.5) return L(flat && (wall === 'mudbrick' || wall === 'brick') ? 'plaster' : wall || 'plaster');                         // walls in the culture's material
+    if (v >= 0.5) return L(flat && (wall === 'mudbrick' || wall === 'mudwall') ? 'mudwall' : flat && (wall === 'brick' || wall === 'brickGrey') ? 'plaster' : wall || 'plaster');                         // walls in the culture's material
     return L('rubble');
   }
   // what a light wall is made of, by culture (houses; city walls use cityWall)
@@ -101,9 +103,9 @@ const SURF = (() => {
     persian: 'mudbrick', central: 'mudbrick', tarim: 'mudbrick', chinese: 'mudbrick', song: 'plaster', tibet: 'plaster',
     mongol: 'felt', steppe: 'felt', indian: 'plaster', sea: 'planks' };
   const CITYWALL = { levant: 'stoneWarm', byz: 'stoneWarm', armenian: 'ashlar', georgian: 'rubble', rum: 'stoneWarm', arab: 'stoneWarm', yemen: 'stoneWarm',
-    persian: 'mudbrick', central: 'mudbrick', tarim: 'mudbrick', chinese: 'mudbrick', song: 'ashlar', indian: 'stoneWarm', tibet: 'plaster' };
-  // mud-brick cities: about half the houses are rendered with mud plaster
-  function houseWall(cul, rng) { const w = WALL[cul] || 'plaster'; return w === 'mudbrick' && rng() < 0.5 ? 'plaster' : w === 'stoneWarm' && rng() < 0.3 ? 'rubble' : w; }
+    persian: 'mudbrick', central: 'mudbrick', tarim: 'mudbrick', chinese: 'brickGrey', song: 'ashlar', indian: 'sandstoneRed', tibet: 'plaster' };
+  // mud-brick cities: about half the houses are rendered with mud (cracked mud render since v22.2b)
+  function houseWall(cul, rng) { const w = WALL[cul] || 'plaster'; return w === 'mudbrick' && rng() < 0.5 ? 'mudwall' : w === 'stoneWarm' && rng() < 0.3 ? 'rubble' : w; }
 
   // the crusader ports of the Levant (Acre and its neighbours) are built of the local limestone, not render
   const look = (city) => (city.culture === 'byz' && city.lat < 37 ? 'levant' : city.culture);

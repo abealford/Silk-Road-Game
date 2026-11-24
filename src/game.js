@@ -191,8 +191,8 @@
   terrainMat.onBeforeCompile = (sh) => {
     withWorldVaryings(sh); Object.assign(sh.uniforms, SEASON_U); sh.fragmentShader = SEASON_GLSL + sh.fragmentShader;
     declVal(sh); SURF.inject(sh);
-    sh.vertexShader = 'attribute vec4 aGW; varying vec4 vGW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vGW = aGW;');
-    sh.fragmentShader = 'varying vec4 vGW;\n' + sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+    sh.vertexShader = 'attribute vec4 aGW; varying vec4 vGW; attribute vec4 aGW2; varying vec4 vGW2;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vGW = aGW; vGW2 = aGW2;');
+    sh.fragmentShader = 'varying vec4 vGW; varying vec4 vGW2;\n' + sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
       if (gtv > 0.0 && surfN.y > -2.0) normal = normalize((viewMatrix * vec4(surfN, 0.0)).xyz);`).replace('#include <color_fragment>', `#include <color_fragment>
       float gtv = uGT * uVal; vec3 surfN = vec3(0.0, -9.0, 0.0);
       {
@@ -206,31 +206,33 @@
         vec2 gdx = dFdx(wp), gdy = dFdy(wp); vec2 rdxa = dFdx(vWPos.zy), rdya = dFdy(vWPos.zy), rdxb = dFdx(vWPos.xy), rdyb = dFdy(vWPos.xy);
         if (gtv > 0.0) {
           float rockW = smoothstep(0.12, 0.34, slope);
-          float wE = max(0.0, 1.0 - vGW.x - vGW.y - vGW.z - vGW.w);
-          float ws[6]; ws[0] = vGW.x; ws[1] = vGW.y; ws[2] = vGW.z; ws[3] = wE; ws[4] = vGW.w;
-          for (int i = 0; i < 5; i++) ws[i] *= 1.0 - rockW;
-          ws[5] = rockW;
+          float wE = max(0.0, 1.0 - vGW.x - vGW.y - vGW.z - vGW.w - vGW2.x - vGW2.y - vGW2.z - vGW2.w);
+          float ws[10]; ws[0] = vGW.x; ws[1] = vGW.y; ws[2] = vGW.z; ws[3] = wE; ws[4] = vGW.w;
+          ws[5] = vGW2.x; ws[6] = vGW2.y; ws[7] = vGW2.z; ws[8] = vGW2.w;   // v22.2b: cracked, scree, steppe, loess (layers 10-13)
+          for (int i = 0; i < 9; i++) ws[i] *= 1.0 - rockW;
+          ws[9] = rockW;
           float mk = smoothstep(0.3, 0.7, vn(wp * 0.045)) * 0.55;  // a second, larger and turned sample hides the tiling
           mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
           float nf = (1.0 - smoothstep(35.0, 150.0, dist)) * uSN;
           vec3 acc = vec3(0.0), nOff = vec3(0.0); float tot = 0.0;
-          for (int i = 0; i < 5; i++) {
+          for (int i = 0; i < 9; i++) {
             float w = ws[i]; if (w < 0.015) continue;
-            vec4 P = uGP[i]; vec2 uv = wp * P.x; vec2 dx = gdx * P.x, dy = gdy * P.x; float Li = float(i);
+            int li = i < 5 ? i : i + 5;
+            vec4 P = uGP[li]; vec2 uv = wp * P.x; vec2 dx = gdx * P.x, dy = gdy * P.x; float Li = float(li);
             vec3 t = textureGrad(tGround, vec3(uv, Li), dx, dy).rgb;
             vec3 t2 = textureGrad(tGround, vec3(rot * uv * 0.37 + 0.31, Li), rot * dx * 0.37, rot * dy * 0.37).rgb;
             t = mix(t, t2, mk);
-            acc += surfDet(c, t, uGM[i], P) * w; tot += w;
+            acc += surfDet(c, t, uGM[li], P) * w; tot += w;
             if (nf > 0.0) { vec3 nt = textureGrad(tGroundN, vec3(uv, Li), dx, dy).xyz * 2.0 - 1.0; nOff += vec3(nt.x, 0.0, -nt.y) * w; }
           }
-          if (ws[5] > 0.015) {
+          if (ws[9] > 0.015) {
             vec4 P = uGP[5]; vec3 an = abs(vWNorm); float bx = an.x / max(an.x + an.z, 1e-3);
             vec3 ta = textureGrad(tGround, vec3(vWPos.zy * P.x, 5.0), rdxa * P.x, rdya * P.x).rgb;
             vec3 tb = textureGrad(tGround, vec3(vWPos.xy * P.x, 5.0), rdxb * P.x, rdyb * P.x).rgb;
-            acc += surfDet(c, mix(tb, ta, bx), uGM[5], P) * ws[5]; tot += ws[5];
+            acc += surfDet(c, mix(tb, ta, bx), uGM[5], P) * ws[9]; tot += ws[9];
             if (nf > 0.0) { vec3 na = textureGrad(tGroundN, vec3(vWPos.zy * P.x, 5.0), rdxa * P.x, rdya * P.x).xyz * 2.0 - 1.0;
               vec3 nb = textureGrad(tGroundN, vec3(vWPos.xy * P.x, 5.0), rdxb * P.x, rdyb * P.x).xyz * 2.0 - 1.0;
-              nOff += (vec3(0.0, -na.y, na.x) * bx + vec3(nb.x, -nb.y, 0.0) * (1.0 - bx)) * ws[5] * 1.6; }
+              nOff += (vec3(0.0, -na.y, na.x) * bx + vec3(nb.x, -nb.y, 0.0) * (1.0 - bx)) * ws[9] * 1.6; }
           }
           c = mix(c, acc / max(tot, 1e-4), gtv);
           vec3 Nw = normalize(vWNorm); surfN = normalize(Nw + (nOff - Nw * dot(Nw, nOff)) * nf * 1.3);
@@ -256,7 +258,11 @@
         float snowLow = uWinter * smoothstep(33.0, 43.0, lat) * smoothstep(0.35, 0.65, vn(wp * 0.035) * 0.6 + vn(wp * 0.21) * 0.4 + uWinter * 0.25);
         float snowHigh = uWinter * smoothstep(48.0 - 22.0 * smoothstep(28.0, 45.0, lat), 70.0, vWPos.y);
         float snow = clamp(max(snowLow, snowHigh) * flat2, 0.0, 1.0);
-        c = mix(c, vec3(0.92, 0.94, 0.98), snow);
+        // v22.2b: snow texture for seasonal snow and for the white vertex colour of the snowline
+        vec3 snowC = vec3(0.92, 0.94, 0.98);
+        float snowS = smoothstep(0.6, 0.78, min(min(diffuseColor.r, diffuseColor.g), diffuseColor.b)) * gtv;
+        if (gtv > 0.0 && max(snow, snowS) > 0.01) { vec4 P = uGP[9]; snowC = surfDet(snowC, textureGrad(tGround, vec3(wp * P.x, 9.0), gdx * P.x, gdy * P.x).rgb, uGM[9], P); }
+        c = mix(c, snowC, max(snow, snowS));
         // v13 close-up ground detail: sand ripples, cracked earth, pebbles
         float near2 = (1.0 - smoothstep(25.0, 110.0, dist)) * (1.0 - gtv);
         if (near2 > 0.0 && snow < 0.5) {
@@ -296,7 +302,7 @@
           btx = 1.0; int li = int(L); vec4 P = uBP[li]; vec2 uv = vSurf.xy * P.x;
           vec3 t = textureGrad(tBuild, vec3(uv, L), bdx * P.x, bdy * P.x).rgb;
           diffuseColor.rgb = surfDet(diffuseColor.rgb, t, uBM[li], P);
-          if (uSN > 1.5) diffuseColor.rgb = 0.5 + 0.5 * cos(6.2832 * (L / 12.0 + vec3(0.0, 0.33, 0.67))); // debug: __gfx.surf.U.uSN.value = 2 paints layers
+          if (uSN > 1.5) diffuseColor.rgb = 0.5 + 0.5 * cos(6.2832 * (L / ${SURF.BN}.0 + vec3(0.0, 0.33, 0.67))); // debug: __gfx.surf.U.uSN.value = 2 paints layers
           vec3 Nw = normalize(vWNorm); bool fl = abs(Nw.y) >= 0.97;
           vec3 T = fl ? vec3(1.0, 0.0, 0.0) : normalize(vec3(Nw.z, 0.0, -Nw.x)); vec3 Bt = fl ? vec3(0.0, 0.0, -1.0) : cross(Nw, T);
           float nf = (1.0 - smoothstep(25.0, 110.0, dist)) * uSN;
@@ -712,7 +718,7 @@
     }
     W.cityCand = null;
     const skirt = lod === 0 ? 4 : lod === 1 ? 8 : 18;
-    const nv = n * n + 4 * n; const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), col = new Float32Array(nv * 3), gw = new Float32Array(nv * 4);
+    const nv = n * n + 4 * n; const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), col = new Float32Array(nv * 3), gw = new Float32Array(nv * 4), gw2 = new Float32Array(nv * 4);
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
       const v = j * n + i; const x = x0 + i * step, z = z0 + j * step; const h = hs[(j + 1) * N + i + 1];
       pos[v * 3] = x; pos[v * 3 + 1] = h; pos[v * 3 + 2] = z;
@@ -724,6 +730,7 @@
       const ao = 1 - clamp(cav / step * 0.45, -0.08, 0.28);
       col[v * 3] = c[0] * ao; col[v * 3 + 1] = c[1] * ao; col[v * 3 + 2] = c[2] * ao;
       gw[v * 4] = TW[0]; gw[v * 4 + 1] = TW[1]; gw[v * 4 + 2] = TW[2]; gw[v * 4 + 3] = TW[3];
+      gw2[v * 4] = TW2[0]; gw2[v * 4 + 1] = TW2[1]; gw2[v * 4 + 2] = TW2[2]; gw2[v * 4 + 3] = TW2[3];
     }
     // skirts
     const edgesIdx = [[], [], [], []];
@@ -732,11 +739,11 @@
     for (let j = 0; j < seg; j++) for (let i = 0; i < seg; i++) { const a = j * n + i, b = a + 1, c = a + n, d = c + 1; idx.push(a, c, b, b, c, d); }
     edgesIdx.forEach((list, ei) => {
       const base = sv;
-      for (const v of list) { pos[sv * 3] = pos[v * 3]; pos[sv * 3 + 1] = pos[v * 3 + 1] - skirt; pos[sv * 3 + 2] = pos[v * 3 + 2]; nor.copyWithin(sv * 3, v * 3, v * 3 + 3); col.copyWithin(sv * 3, v * 3, v * 3 + 3); gw.copyWithin(sv * 4, v * 4, v * 4 + 4); sv++; }
+      for (const v of list) { pos[sv * 3] = pos[v * 3]; pos[sv * 3 + 1] = pos[v * 3 + 1] - skirt; pos[sv * 3 + 2] = pos[v * 3 + 2]; nor.copyWithin(sv * 3, v * 3, v * 3 + 3); col.copyWithin(sv * 3, v * 3, v * 3 + 3); gw.copyWithin(sv * 4, v * 4, v * 4 + 4); gw2.copyWithin(sv * 4, v * 4, v * 4 + 4); sv++; }
       for (let k = 0; k < n - 1; k++) { const a = list[k], b = list[k + 1], c = base + k, d = base + k + 1; idx.push(a, b, c, b, d, c, a, c, b, b, c, d); }
     });
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('aGW', new THREE.BufferAttribute(gw, 4));
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('aGW', new THREE.BufferAttribute(gw, 4)); g.setAttribute('aGW2', new THREE.BufferAttribute(gw2, 4));
     g.setIndex(idx); g.computeBoundingSphere();
     const m = new THREE.Mesh(g, terrainMat); m.receiveShadow = true; m.castShadow = lod === 0;
     return m;
@@ -816,13 +823,26 @@
     // city ground
     if (city && cd < city.R + 2) { const ct = smooth(city.R + 2, city.R - 5, cd) * 0.82; const cg = CULTURE_GROUND[city.culture] || [.78, .7, .58]; r = lerp(r, cg[0] + n2 * .03, ct); g = lerp(g, cg[1] + n2 * .03, ct); b = lerp(b, cg[2] + n2 * .03, ct); }
     TC[0] = lin(clamp(r, 0, 1)); TC[1] = lin(clamp(g, 0, 1)); TC[2] = lin(clamp(b, 0, 1));
-    groundWeights(x, z, r, g, b, dom, bio.dens[bi], pd, city && cd < city.R + 2, rd < rhw + 16);
+    groundWeights(x, z, r, g, b, dom, bio.dens[bi], pd, city && cd < city.R + 2, rd < rhw + 16, h, ny, ll);
     return TC;
   }
   // v22.2: which ground textures blend here (meadow, patchy grass, sand, forest floor; dry earth takes the rest).
   // Read from the final colour, so farmland, road dust, city ground, banks and every region fall out of the tuned palette.
-  const TW = [0, 0, 0, 0];
-  function groundWeights(x, z, r, g, b, dom, dens, pd, inCity, bank) {
+  const TW = [0, 0, 0, 0], TW2 = [0, 0, 0, 0];
+  // v22.2b: regional ground (cracked mud, scree, dry steppe grass, loess) by biome, sampled at five points so borders fade
+  const REG_GROUND = [
+    { mesopotamia: 1, iran: 0.7, sand: 0.6, gobi: 0.8, oasis: 0.25 },                       // cracked mud
+    { alpine: 1, tibet: 1, iran: 0.5, anatolia: 0.45, caucasus: 0.5, gobi: 0.4 },          // scree
+    { steppe: 1, tibet: 0.6, anatolia: 0.35, gobi: 0.3 },                                   // dry steppe grass
+    { loess: 1, northchina: 0.35 },                                                          // loess
+  ];
+  const RA = [0, 0, 0, 0], RO = [[0, 0], [0.22, 0.12], [-0.22, -0.12], [0.12, -0.2], [-0.12, 0.2]];
+  function regAff(ll) {
+    RA[0] = RA[1] = RA[2] = RA[3] = 0;
+    for (const o of RO) { const d = W.BIOME_KEYS[W.bio.dom[W.bioIndex(ll[0] + o[0], ll[1] + o[1])]]; for (let k = 0; k < 4; k++) RA[k] += (REG_GROUND[k][d] || 0) * 0.2; }
+    return RA;
+  }
+  function groundWeights(x, z, r, g, b, dom, dens, pd, inCity, bank, h, ny, ll) {
     const lum = r * 0.3 + g * 0.55 + b * 0.15, gr = g - r;
     let meadow = smooth(0.0, 0.09, gr) * smooth(0.02, 0.1, g - b);
     let patchy = (1 - meadow) * smooth(-0.12, -0.01, gr) * smooth(0.12, 0.24, g - b);
@@ -834,6 +854,14 @@
     if (fd && !inCity && pd > 6) forest = meadow * fd * smooth(0.45, 0.8, dens) * smooth(-0.25, 0.2, W.noise(x * 0.012 + 3, z * 0.012 - 7));
     if (bank) { forest *= 0.3; }
     meadow -= forest;
+    TW2[0] = TW2[1] = TW2[2] = TW2[3] = 0;
+    if (!inCity && pd > 6 && Math.min(r, g, b) < 0.84) {
+      const ra = regAff(ll); let earth = Math.max(0, 1 - meadow - patchy - sand - forest);
+      if (ra[2] > 0) { const k = ra[2] * 0.85; const st = (meadow + patchy) * k + earth * ra[2] * 0.5; meadow *= 1 - k; patchy *= 1 - k; earth *= 1 - ra[2] * 0.5; TW2[2] = st; }
+      if (ra[3] > 0) { const k = ra[3] * 0.8; const lo = (earth + sand * 0.6 + patchy * 0.4) * k; earth *= 1 - k; sand *= 1 - 0.6 * k; patchy *= 1 - 0.4 * k; TW2[3] = lo; }
+      if (ra[1] > 0) { const k = ra[1] * Math.max(smooth(25, 70, h), smooth(0.97, 0.86, ny)) * 0.9; TW2[1] = earth * k; earth *= 1 - k; }
+      if (ra[0] > 0 && !bank) { const k = ra[0] * smooth(0.96, 0.99, ny) * smooth(-0.1, 0.25, W.noise(x * 0.02 - 11, z * 0.02 + 5)) * 0.9; TW2[0] = earth * k + sand * k * 0.3; sand *= 1 - k * 0.3; }
+    }
     TW[0] = meadow; TW[1] = patchy; TW[2] = sand; TW[3] = forest;
   }
   // vegetation

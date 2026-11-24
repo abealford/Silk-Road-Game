@@ -303,6 +303,76 @@ def rock_cell():
     return Image.fromarray(np.clip(img, 0, 255).astype(np.uint8))
 
 
+# ---------- v22.2b: cards composed from real photo sprites ----------
+
+def upright(im):
+    """Rotate a sprite so its long axis points up the card, with its heavier (wider) end at the top."""
+    a = np.asarray(im)[..., 3].astype(np.float32)
+    ys, xs = np.nonzero(a > 128)
+    if len(xs) < 10:
+        return im
+    x, y = xs - xs.mean(), ys - ys.mean()
+    cov = np.cov(np.stack([x, y]))
+    w, v = np.linalg.eigh(cov)
+    ax = v[:, 1]
+    ang = math.degrees(math.atan2(ax[0], ax[1]))
+    r = im.rotate(-ang, expand=True, resample=Image.BICUBIC)
+    b = np.asarray(r)[..., 3] > 128
+    rows = b.sum(1); h = len(rows)
+    if rows[: h // 2].sum() < rows[h // 2:].sum():   # wider half goes up (the spray's tip end)
+        r = r.rotate(180)
+    bb = r.getbbox()
+    return r.crop(bb) if bb else r
+
+
+def spray_card(sp, seed, n=11, length=(0.42, 0.62), stem=(84, 66, 44), tint=(1, 1, 1), splay=(28, 70)):
+    """A conifer branch: a stem up the card with real sprays fanned off it, the longest low down."""
+    rnd = random.Random(seed)
+    W = S * SS
+    img = Image.new('RGBA', (W, W), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    x0, y0, y1 = W / 2, W * 0.985, W * 0.05
+    d.line([(x0, y0), (x0 + rnd.uniform(-6, 6), W * 0.5), (x0, y1)], fill=stem + (255,), width=int(3 * SS))
+    ups = [upright(s) for s in sp]
+    for k in range(n):
+        t = k / max(1, n - 1)
+        y = y0 - (y0 - y1) * (0.12 + 0.8 * t)
+        side = 1 if k % 2 else -1
+        s = rnd.choice(ups)
+        L = W * rnd.uniform(*length) * (1.0 - 0.45 * t)
+        kk = L / s.height
+        im = s.resize((max(2, int(s.width * kk)), max(2, int(L))), Image.LANCZOS)
+        a = np.asarray(im).astype(np.float32); a[..., :3] *= np.array(tint, np.float32) * rnd.uniform(0.85, 1.08)
+        im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGBA')
+        ang = side * rnd.uniform(*splay)
+        im = im.rotate(-ang, expand=True, resample=Image.BICUBIC)
+        # anchor the sprite's base on the stem
+        bx = x0 + side * im.width * 0.38; by = y - im.height * 0.42
+        img.alpha_composite(im, (int(bx - im.width / 2), int(by - im.height / 2)))
+    # a tip spray straight up
+    s = rnd.choice(ups); L = W * 0.3; kk = L / s.height
+    im = s.resize((max(2, int(s.width * kk)), int(L)), Image.LANCZOS)
+    img.alpha_composite(im, (int(x0 - im.width / 2), int(y1)))
+    return finish(img)
+
+
+def single_card(sp, tint=(1, 1, 1), fill=0.95, fan=((-24, 0.8), (24, 0.8), (0, 1.0))):
+    """Real fronds fanned from the bottom centre (ferns): the biggest sprites, upright, then tilted."""
+    big = sorted(sp, key=lambda q: -q.width * q.height)
+    W = S * SS
+    img = Image.new('RGBA', (W, W), (0, 0, 0, 0))
+    for i, (ang, sc) in enumerate(fan):
+        s = upright(big[i % len(big)])
+        k = W * fill * sc / max(s.width, s.height)
+        im = s.resize((max(2, int(s.width * k)), max(2, int(s.height * k))), Image.LANCZOS)
+        a = np.asarray(im).astype(np.float32); a[..., :3] *= np.array(tint, np.float32) * (0.9 if ang else 1.0)
+        im = Image.fromarray(np.clip(a, 0, 255).astype(np.uint8), 'RGBA')
+        pad = Image.new('RGBA', (im.width, im.height * 2), (0, 0, 0, 0)); pad.alpha_composite(im, (0, 0))   # rotate about the base
+        pad = pad.rotate(-ang, resample=Image.BICUBIC, expand=True)
+        img.alpha_composite(pad, (int(W / 2 - pad.width / 2), int(W * 0.99 - pad.height / 2)))
+    return finish(img)
+
+
 def main():
     cells = {}
     # bark: pine bark is orange-red when raw; tame it towards a natural brown-grey
@@ -315,16 +385,22 @@ def main():
     spA = sprites('leaves-broadleaf/color.jpg', 'leaves-broadleaf/opacity.png')
     spB = sprites('tree-island-01/leaves/color.jpg', 'tree-island-01/leaves/opacity.png')
     print('leaf sprites:', len(spA), len(spB))
+    # v22.2b: real photos for the fir / spruce branch, cedar / juniper sprays, ferns and narrow leaves
+    spFir = sprites('conifer-twig-fir/color.jpg', 'conifer-twig-fir/opacity.png', min_px=2500)
+    spCed = sprites('conifer-spray/color.jpg', 'conifer-spray/opacity.png', min_px=2500)
+    spFern = sprites('fern/color.jpg', 'fern/opacity.png', min_px=4000)
+    spSlim = sprites('leaves-slender/color.jpg', 'leaves-slender/opacity.png')
+    print('photo sprites: fir', len(spFir), 'cedar', len(spCed), 'fern', len(spFern), 'slender', len(spSlim))
     cells['leafA'] = leaf_cluster(spA, 11, n=40, leaf_px=(40, 58), tint=(0.96, 1.0, 0.9), darken=0.25)
     cells['leafB'] = leaf_cluster(spB, 12, n=44, leaf_px=(40, 62), tint=(1.0, 1.0, 0.92), darken=0.25)
-    cells['leafNarrow'] = leaf_cluster(spB, 13, n=70, leaf_px=(28, 44), tint=(0.98, 1.0, 0.92), darken=0.2, spread=1.0)
+    cells['leafNarrow'] = leaf_cluster(spSlim if spSlim else spB, 13, n=70, leaf_px=(34, 54), tint=(0.98, 1.0, 0.92), darken=0.2, spread=1.0)
     cells['leafC'] = leaf_cluster(spA, 14, n=46, leaf_px=(36, 52), tint=(0.62, 0.78, 0.6), darken=0.3)
     cells['leafSmall'] = leaf_cluster(spB, 15, n=90, leaf_px=(20, 30), tint=(1.0, 1.0, 0.85), darken=0.15, spread=1.0)
-    cells['needle'] = needle_card(21)
+    cells['needle'] = spray_card(spFir, 21, n=17, length=(0.4, 0.58), tint=(0.74, 0.86, 0.78), splay=(48, 78)) if spFir else needle_card(21)
     cells['needlePine'] = pine_card(22)
-    cells['scale'] = scale_card(23)
+    cells['scale'] = spray_card(spCed, 23, n=13, tint=(0.8, 0.88, 0.8), splay=(35, 70)) if spCed else scale_card(23)
     cells['frond'] = frond_card(24)
-    cells['fern'] = fern_card(25)
+    cells['fern'] = single_card(spFern, tint=(0.95, 1.0, 0.9)) if spFern else fern_card(25)
     cells['white'] = Image.new('RGBA', (S, S), (255, 255, 255, 255))
 
     atlas = Image.new('RGBA', (S * 4, S * 4), (255, 255, 255, 255))

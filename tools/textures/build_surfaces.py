@@ -13,8 +13,8 @@ Each layer ships a colour image (512 px, WebP) and a normal map (256 px, WebP, O
 its mean linear colour. The game multiplies the vertex colour by (texture / mean), so the region and
 culture palettes stay in charge of the colour and the texture brings the detail (see src/surfaces.js).
 
-Sources are the CC0 textures in assets/textures/. Layers the pack lacks (rock, plaster, mud brick, fired
-brick, roof tiles, felt) are drawn here from height fields with fixed seeds, so the build is reproducible.
+Sources are the CC0 textures in assets/textures/. Since v22.2b every layer is a photo; the drawn generators (gen_rock and friends) are kept
+for reference and as fallbacks.
 Needs: pillow numpy
 """
 import os, io, json, base64
@@ -215,16 +215,22 @@ GROUND = [
     ('sand', 'sand', 3.4, 1.1, .15),
     ('earth', 'dry-earth', 2.6, 1.1, .12),
     ('forest', 'forest-floor-leaves', 1.8, 1.0, .3),
-    ('rock', gen_rock, 6.0, 1.15, 0.0),
+    ('rock', 'rock-cliff-grey', 6.0, 1.15, 0.0),          # v22.2b: photo (was drawn: gen_rock)
     ('setts', 'paving-setts', 2.2, 1.0, .25),
     ('flags', 'paving-rubble', 2.4, 1.0, .25),
     ('fan', 'paving-fan', 2.2, 1.0, .25),
+    # v22.2b: snow and regional ground (layers 9-13; weights in aGW2 and the snow test in the terrain shader)
+    ('snow', 'snow', 3.0, 1.0, .5),
+    ('cracked', 'mud-cracked', 3.2, 1.05, .1),
+    ('scree', 'scree', 2.6, 1.1, .1),
+    ('steppe', 'steppe-dry', 2.8, 1.15, .2),
+    ('loess', 'loess', 3.0, 1.05, .15),
 ]
 BUILD = [
-    ('plaster', gen_plaster, 4.5, 1.0, 0.0),
-    ('mudbrick', gen_mudbrick, 2.4, 1.0, 0.0),
-    ('brick', gen_brick, 1.6, 1.0, .35),
-    ('tile', gen_rooftile, 2.0, 1.0, 0.0),
+    ('plaster', 'plaster-white', 3.0, 1.0, 0.0),          # v22.2b: photos replace the drawn plaster, mud brick, brick, tile, felt
+    ('mudbrick', 'mud-brick-rough', 2.4, 1.0, 0.0),
+    ('brick', 'brick-byzantine', 2.0, 1.0, .35),
+    ('tile', 'roof-tiles-terracotta', 2.2, 1.0, 0.0),
     ('stoneWarm', 'stone-blocks-warm', 2.6, .85, .3),
     ('rubble', 'stone-rubble-warm', 2.2, .85, .25),
     ('ashlar', 'stone-ashlar-grey', 3.0, .95, .2),
@@ -232,7 +238,14 @@ BUILD = [
     ('planks', 'wood-planks', 2.0, .9, .3),
     ('boards', 'wood-boards-studded', 2.0, .9, .3),
     ('thatch', 'thatch-reed', 2.2, .95, .35),
-    ('felt', gen_felt, 2.5, 1.0, 0.0),
+    ('felt', 'felt', 2.0, 1.0, 0.0),
+    # v22.2b: new building layers
+    ('tileGrey', 'roof-tiles-grey', 2.2, 1.0, 0.0),
+    ('glazed', 'tile-glazed-turquoise', 1.2, 1.0, 0.0),
+    ('shingles', 'shingles-wood', 2.0, .95, .2),
+    ('mudwall', 'mud-wall-cracked', 3.0, 1.0, 0.0),
+    ('brickGrey', 'brick-grey', 2.0, 1.0, .2),
+    ('sandstoneRed', 'sandstone-red', 2.6, .9, .3),
 ]
 
 
