@@ -268,9 +268,29 @@
     return m;
   }
   const objMat = makeObjMat(false), bldMat = makeObjMat(true);
-  const vegMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
+  // v22.1: vegetation samples the atlas in src/veg_atlas.js. Each vertex carries its atlas cell (aCell: u0, v0, du, dv) and a local UV
+  // that wraps inside the cell (bark tiles along trunks); geometry without UVs lands on the white corner texel and stays vertex-coloured.
+  // Normals are real attributes (leaf cards get a soft outward normal so crowns shade like volumes) and are not flipped on back faces.
+  const vegMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  const VEG_SWAY_GLSL = `
+      float ph = time * 1.4 + position.x * 0.21 + position.z * 0.17;
+      float gust = 0.6 + 0.8 * sin(time * 0.35 + position.x * 0.013 + position.z * 0.009);
+      transformed.x += sin(ph) * 0.045 * aSway * gust; transformed.z += cos(ph * 0.83) * 0.034 * aSway * gust;`;
+  const VEG_MAPFRAG = `
+    #ifdef USE_MAP
+    {
+      vec2 lu = vMapUv; vec2 gx = dFdx(lu) * vCell.zw; vec2 gy = dFdy(lu) * vCell.zw; vec2 tuv = vCell.xy + fract(lu) * vCell.zw;
+      #if __VERSION__ >= 300
+        vec4 sampledDiffuseColor = textureGrad(map, tuv, gx, gy);
+      #else
+        vec4 sampledDiffuseColor = texture2D(map, tuv);
+      #endif
+      diffuseColor *= sampledDiffuseColor;
+    }
+    #endif`;
   vegMat.onBeforeCompile = (sh) => {
-    withWorldVaryings(sh); Object.assign(sh.uniforms, SEASON_U); sh.fragmentShader = SEASON_GLSL + sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+    withWorldVaryings(sh); Object.assign(sh.uniforms, SEASON_U);
+    sh.fragmentShader = 'varying vec4 vCell;\n' + SEASON_GLSL + sh.fragmentShader.replace('#include <map_fragment>', VEG_MAPFRAG).replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n      normal = normalize(vNormal);').replace('#include <color_fragment>', `#include <color_fragment>
       {
         float lat = 38.0 - vWPos.z / uK; vec3 c = diffuseColor.rgb;
         float leaf = clamp((c.g - max(c.r, c.b)) * 5.0, 0.0, 1.0);
@@ -282,12 +302,28 @@
         diffuseColor.rgb = c;
       }`);
     sh.uniforms.time = waterUniforms.time;
-    sh.vertexShader = 'uniform float time; attribute float aSway;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-      float ph = time * 1.4 + position.x * 0.21 + position.z * 0.17;
-      float gust = 0.6 + 0.8 * sin(time * 0.35 + position.x * 0.013 + position.z * 0.009);
-      transformed.x += sin(ph) * 0.045 * aSway * gust; transformed.z += cos(ph * 0.83) * 0.034 * aSway * gust;`);
+    sh.vertexShader = 'uniform float time; attribute float aSway; attribute vec4 aCell; varying vec4 vCell;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vCell = aCell;' + VEG_SWAY_GLSL);
     withStyle(sh, 6.0, 0.0, -0.06); withRim(sh, 0.22); withHaze(sh, 'vWPos');
   };
+  // shadows: the same alpha-cut atlas lookup and sway, so leaf cards cast leaf-shaped shadows that move with the tree
+  const vegDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide });
+  vegDepth.onBeforeCompile = (sh) => {
+    sh.uniforms.time = waterUniforms.time;
+    sh.vertexShader = 'uniform float time; attribute float aSway; attribute vec4 aCell; varying vec4 vCell;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vCell = aCell;' + VEG_SWAY_GLSL);
+    sh.fragmentShader = 'varying vec4 vCell;\n' + sh.fragmentShader.replace('#include <map_fragment>', VEG_MAPFRAG);
+  };
+  TK.attach(vegMat, () => { vegDepth.map = vegMat.map; vegDepth.alphaTest = 0.5; vegDepth.needsUpdate = true; if (GFX.vegReady) GFX.vegReady(); });
+  // one geometry from the old vertex-coloured pieces (pos, col, sway) plus the new textured trees T (or null)
+  function vegGeo(pos, col, sway, T) {
+    const n0 = pos.length / 3, n1 = T ? T.pos.length / 3 : 0, N = n0 + n1;
+    const P = new Float32Array(N * 3), C = new Float32Array(N * 3), S = new Float32Array(N), UV = new Float32Array(N * 2), CE = new Float32Array(N * 4);
+    P.set(pos); C.set(col); S.set(sway);
+    if (n1) { P.set(T.pos, n0 * 3); C.set(T.col, n0 * 3); S.set(T.sw, n0); UV.set(T.uv, n0 * 2); CE.set(T.cell, n0 * 4); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('color', new THREE.BufferAttribute(C, 3)); g.setAttribute('aSway', new THREE.BufferAttribute(S, 1));
+    g.setAttribute('uv', new THREE.BufferAttribute(UV, 2)); g.setAttribute('aCell', new THREE.BufferAttribute(CE, 4));
+    g.computeVertexNormals(); if (n1) g.attributes.normal.array.set(T.nrm, n0 * 3);
+    g.computeBoundingSphere(); return g;
+  }
   const roadMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 });
   roadMat.onBeforeCompile = (sh) => {
     sh.vertexShader = 'attribute vec2 aRoad; varying vec2 vRoad; varying vec3 vWPos2;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vRoad = aRoad; vWPos2 = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -716,11 +752,17 @@
   // far-distance tree impostors: one low double-pyramid per tree, coloured like its canopy
   const IMP = {};
   function impShape(type) {
-    if (IMP[type] !== undefined) return IMP[type]; const tg = B.treeGeoLow(type) || B.treeGeo(type); if (!tg) return (IMP[type] = null);
+    if (IMP[type] !== undefined) return IMP[type];
+    if (TK.state.ready && TK.has(type)) { // v22.1: size and colour come from the new tree, so the far billboard matches the near one
+      const v = TK.variants(type, 1)[0]; const tall = v.h / Math.max(0.5, v.r) > 2.2; const rr = tall ? v.r * 0.95 : v.r * 0.8;
+      return (IMP[type] = { h: v.h, r: Math.min(rr, v.h * 0.6), base: tall ? 0.1 : 0.3, mid: tall ? 0.36 : 0.6, c: v.c.slice() });
+    }
+    const tg = B.treeGeoLow(type) || B.treeGeo(type); if (!tg) return (IMP[type] = null);
     const P = tg.pos, C = tg.col; let ymax = 0, rmax = 0, cr = 0, cg = 0, cb = 0, cn = 0; for (let v = 0; v < P.length; v += 3) { ymax = Math.max(ymax, P[v + 1]); rmax = Math.max(rmax, Math.hypot(P[v], P[v + 2])); }
     for (let v = 0; v < P.length; v += 3) if (P[v + 1] > ymax * 0.4) { cr += C[v]; cg += C[v + 1]; cb += C[v + 2]; cn++; }
     if (!cn || ymax < 0.6) return (IMP[type] = null);
-    const tall = ymax / Math.max(0.5, rmax) > 2.2; return (IMP[type] = { h: ymax, r: Math.min(rmax, ymax * 0.6), base: tall ? 0.12 : 0.32, mid: tall ? 0.38 : 0.6, c: [cr / cn, cg / cn, cb / cn] });
+    const tall = ymax / Math.max(0.5, rmax) > 2.2; const res = { h: ymax, r: Math.min(rmax, ymax * 0.6), base: tall ? 0.12 : 0.32, mid: tall ? 0.38 : 0.6, c: [cr / cn, cg / cn, cb / cn] };
+    if (TK.has(type) && !TK.state.ready) return res; return (IMP[type] = res);
   }
   function buildImpostors(cx, cz, rng) {
     if (!Q.imp) return null; const x0 = cx * CH, z0 = cz * CH; const pos = [], col = [], sway = []; const tries = Math.round(150 * Q.imp);
@@ -736,19 +778,37 @@
       for (let q = 0; q < 4; q++) { const A = ring[q], Bq = ring[(q + 1) % 4]; pos.push(...top, ...Bq, ...A); col.push(...cT, ...cM, ...cM); pos.push(...bot, ...A, ...Bq); col.push(...cB, ...cM, ...cM); for (let i = 0; i < 6; i++) sway.push(0); }
     }
     if (!pos.length) return null;
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('aSway', new THREE.Float32BufferAttribute(sway, 1)); g.computeVertexNormals(); g.computeBoundingSphere();
-    const m = new THREE.Mesh(g, vegMat); m.receiveShadow = false; return m;
+    const m = new THREE.Mesh(vegGeo(pos, col, sway, null), vegMat); m.receiveShadow = false; return m;
   }
+  // thickly wooded biomes: more tries per chunk and a higher chance that a try becomes a tree (1 = full forest)
+  const FOREST_DOM = { pontic: 1, caucasus: 1, hyrcanian: 1, southchina: 1, tropical: 1, alpine: 0.7, thrace: 0.5 };
   function buildVeg(cx, cz, lod) {
     const x0 = cx * CH, z0 = cz * CH; const rng = W.rng(cx * 7919 + cz * 104729 + 13);
     const cand = chunkCities(x0, z0); W.cityCand = cand.length ? cand : null;
     const pos = [], col = [], sway = [];
     if (lod === 2) { const im = buildImpostors(cx, cz, rng); W.cityCand = null; return [im, null]; }
-    const tries = Math.round((lod === 0 ? 540 : 290) * Q.veg);
+    // v22.1 textured trees (trunks, branches, alpha-cut leaf cards) go in their own arrays and join the chunk mesh at the end
+    const T = { pos: [], nrm: [], col: [], uv: [], cell: [], sw: [] };
+    function placeTK(type, x, h, z, s, ry, tint, tr, vi) {
+      if (!TK.state.ready) return false; const vs = TK.variants(type, lod === 0 ? 0 : 1); if (!vs) return false;
+      const v = vs[vi === undefined ? (rng() * vs.length) | 0 : vi % vs.length]; const c = Math.cos(ry), sn = Math.sin(ry), n = v.pos.length / 3, yb = h - 0.15;
+      for (let i = 0, j = 0; i < n; i++, j += 3) {
+        const lx = v.pos[j], ly = v.pos[j + 1], lz = v.pos[j + 2];
+        T.pos.push(x + (lx * c + lz * sn) * s, yb + ly * s, z + (-lx * sn + lz * c) * s);
+        T.nrm.push(v.nrm[j] * c + v.nrm[j + 2] * sn, v.nrm[j + 1], -v.nrm[j] * sn + v.nrm[j + 2] * c);
+        T.col.push(v.col[j] * tr, v.col[j + 1] * tint, v.col[j + 2] * tint); T.sw.push(v.sw[i] * s);
+        T.uv.push(v.uv[i * 2], v.uv[i * 2 + 1]); T.cell.push(v.cell[i * 4], v.cell[i * 4 + 1], v.cell[i * 4 + 2], v.cell[i * 4 + 3]);
+      }
+      return true;
+    }
+    // forests are denser: where the biome is thickly wooded the chunk gets more tries
+    const forestK = (() => { const ll = W.toLL(x0 + CH / 2, z0 + CH / 2); const bi = W.bioIndex(ll[0], ll[1]); const f = FOREST_DOM[W.BIOME_KEYS[W.bio.dom[bi]]]; return f && W.bio.dens[bi] >= 0.45 ? 1 + (lod === 0 ? 0.3 : 0.12) * f : 1; })();
+    const tries = Math.round((lod === 0 ? 540 : 290) * Q.veg * forestK);
     for (let k = 0; k < tries; k++) {
       const x = x0 + rng() * CH, z = z0 + rng() * CH;
       const ll = W.toLL(x, z); const bi = W.bioIndex(ll[0], ll[1]);
       let dens = W.bio.dens[bi]; const dom = W.BIOME_KEYS[W.bio.dom[bi]];
+      if (FOREST_DOM[dom] && dens > 0.45) dens = Math.min(1, dens * (1 + 0.35 * FOREST_DOM[dom]));
       const rq = W.riverQuery(x, z); const nearRiver = rq.i >= 0 && rq.d < rq.hw + 20;
       if (nearRiver) dens = Math.max(dens, 0.5);
       const nc0 = W.nearestCity(x, z); if (nc0.d < nc0.c.R + 30 && nc0.d > nc0.c.R + 3 && ['sand', 'gobi', 'iran', 'mesopotamia', 'tibet', 'steppe', 'loess'].includes(dom)) dens = Math.max(dens, 0.55);
@@ -767,21 +827,33 @@
       let tot = 0; for (const t in weights) tot += weights[t]; if (tot <= 0) continue;
       let pr = rng() * tot; for (const t in weights) { pr -= weights[t]; if (pr <= 0) { type = t; break; } }
       if (!type) continue;
-      const tg = lod === 0 ? B.treeGeo(type) : B.treeGeoLow(type); if (!tg) continue;
-      const s = type === 'rock' ? 0.5 + rng() * 2.2 : 0.75 + rng() * 0.6; const ry = rng() * Math.PI * 2; const cs = Math.cos(ry) * s, sn = Math.sin(ry) * s;
+      const s = type === 'rock' ? 0.5 + rng() * 2.2 : 0.75 + rng() * 0.6; const ry = rng() * Math.PI * 2;
       const tint = 0.86 + rng() * 0.26, tr = tint * (0.96 + rng() * 0.08);
-      const P = tg.pos, Cc = tg.col; const yb = h - 0.15;
-      const sw = type === 'rock' ? 0 : 1;
-      for (let v = 0; v < P.length; v += 3) {
-        const lx = P[v], ly = P[v + 1], lz = P[v + 2];
-        pos.push(x + lx * cs + lz * sn, yb + ly * s, z - lx * sn + lz * cs);
-        col.push(Cc[v] * tr, Cc[v + 1] * tint, Cc[v + 2] * tint); sway.push(ly * s * sw);
+      // rocks wear moss only in damp country; dry country gets bare rock (variant 0)
+      const damp = type === 'rock' ? (FOREST_DOM[dom] || W.bio.gg[bi] > W.bio.gr[bi] + 0.02) ? (rng() * 3) | 0 : 0 : undefined;
+      if (!placeTK(type, x, h, z, s, ry, tint, tr, damp)) {
+        const tg = lod === 0 ? B.treeGeo(type) : B.treeGeoLow(type); if (!tg) continue;
+        const cs = Math.cos(ry) * s, sn = Math.sin(ry) * s; const P = tg.pos, Cc = tg.col; const yb = h - 0.15;
+        const sw = type === 'rock' ? 0 : 1;
+        for (let v = 0; v < P.length; v += 3) {
+          const lx = P[v], ly = P[v + 1], lz = P[v + 2];
+          pos.push(x + lx * cs + lz * sn, yb + ly * s, z - lx * sn + lz * cs);
+          col.push(Cc[v] * tr, Cc[v + 1] * tint, Cc[v + 2] * tint); sway.push(ly * s * sw);
+        }
       }
-      // undergrowth: shrubs and saplings around trees in wooded country
-      if (type !== 'rock' && dens > 0.3 && rng() < 0.5 * Q.veg) { const ug = lod === 0 ? B.treeGeo('shrub') : B.treeGeoLow('shrub'); if (ug) for (let q = 0, qn = 1 + (rng() * 2 | 0); q < qn; q++) {
-        const a = rng() * 6.28, rr = 1.6 + rng() * 2.4; const ux = x + Math.cos(a) * rr, uz = z + Math.sin(a) * rr; const uh = W.height(ux, uz); const uo = W.OUT; if (uo.pd < 4 || uo.rd < uo.rhw + 1.5) continue;
-        const us = 0.5 + rng() * 0.45, ur = rng() * 6.28, uc = Math.cos(ur) * us, un = Math.sin(ur) * us; const ut = 0.85 + rng() * 0.25; const UP = ug.pos, UC = ug.col;
-        for (let v = 0; v < UP.length; v += 3) { const lx = UP[v], ly = UP[v + 1], lz = UP[v + 2]; pos.push(ux + lx * uc + lz * un, uh - 0.1 + ly * us, uz - lx * un + lz * uc); col.push(UC[v] * ut, UC[v + 1] * ut, UC[v + 2] * ut); sway.push(ly * us); } } }
+      // undergrowth: ferns, bushes and saplings around trees in wooded country
+      if (type !== 'rock' && dens > 0.3 && rng() < 0.5 * Q.veg * (dens >= 0.75 ? 1.4 : 1)) {
+        const lushDom = ['pontic', 'caucasus', 'hyrcanian', 'southchina', 'tropical', 'thrace', 'alpine', 'oasis'].includes(dom);
+        for (let q = 0, qn = 1 + (rng() * (lushDom ? 3 : 2) | 0); q < qn; q++) {
+          const a = rng() * 6.28, rr = 1.4 + rng() * 3.0; const ux = x + Math.cos(a) * rr, uz = z + Math.sin(a) * rr; const uh = W.height(ux, uz); const uo = W.OUT; if (uo.pd < 4 || uo.rd < uo.rhw + 1.5) continue;
+          const ut = 0.85 + rng() * 0.25, ur = rng() * 6.28; const useFern = lushDom && rng() < 0.65;
+          if (lod !== 0 && useFern) continue;
+          if (placeTK(useFern ? 'fern' : 'shrub', ux, uh + 0.1, uz, useFern ? 0.8 + rng() * 0.7 : 0.5 + rng() * 0.45, ur, ut, ut)) continue;
+          const ug = lod === 0 ? B.treeGeo('shrub') : B.treeGeoLow('shrub'); if (!ug) continue;
+          const us = 0.5 + rng() * 0.45, uc = Math.cos(ur) * us, un = Math.sin(ur) * us; const UP = ug.pos, UC = ug.col;
+          for (let v = 0; v < UP.length; v += 3) { const lx = UP[v], ly = UP[v + 1], lz = UP[v + 2]; pos.push(ux + lx * uc + lz * un, uh - 0.1 + ly * us, uz - lx * un + lz * uc); col.push(UC[v] * ut, UC[v + 1] * ut, UC[v + 2] * ut); sway.push(ly * us); }
+        }
+      }
     }
     // orchards, olive groves, vineyards and tea gardens in neat rows
     {
@@ -794,9 +866,10 @@
         const pl = plotInfo(x, z, ny, o.pd, o.sea, o.lake, o.city, o.cd, o.vil, o.vd);
         if (!pl.orch || pl.fm < 0.45 || o.rd < o.rhw + 2) continue;
         const fu = pl.u / 17 - Math.floor(pl.u / 17), fv = pl.v / 25 - Math.floor(pl.v / 25); if (fu < .08 || fu > .92 || fv < .06 || fv > .94) continue;
-        const type = pl.kind; const tg = lod === 0 ? B.treeGeo(type) : B.treeGeoLow(type); if (!tg) continue;
-        const s = (type === 'vine' || type === 'tea' ? 0.9 : 0.7) + rng() * 0.2; const ry = type === 'vine' ? -ang : rng() * 6.28; const cs = Math.cos(ry) * s, sn = Math.sin(ry) * s;
-        const P = tg.pos, Cc = tg.col; const tint = 0.9 + rng() * 0.15;
+        const type = pl.kind; const s = (type === 'vine' || type === 'tea' ? 0.9 : 0.7) + rng() * 0.2; const ry = type === 'vine' ? -ang : rng() * 6.28; const tint = 0.9 + rng() * 0.15;
+        if (placeTK(type, x, h + 0.05, z, s, ry, tint, tint)) continue;
+        const tg = lod === 0 ? B.treeGeo(type) : B.treeGeoLow(type); if (!tg) continue; const cs = Math.cos(ry) * s, sn = Math.sin(ry) * s;
+        const P = tg.pos, Cc = tg.col;
         for (let v = 0; v < P.length; v += 3) { const lx = P[v], ly = P[v + 1], lz = P[v + 2]; pos.push(x + lx * cs + lz * sn, h - 0.1 + ly * s, z - lx * sn + lz * cs); col.push(Cc[v] * tint, Cc[v + 1] * tint, Cc[v + 2] * tint); sway.push(ly * s * .6); }
       }
     }
@@ -842,14 +915,12 @@
     }
     W.cityCand = null;
     let vm = null;
-    if (pos.length) {
-      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('aSway', new THREE.Float32BufferAttribute(sway, 1));
-      g.computeVertexNormals(); g.computeBoundingSphere();
-      vm = new THREE.Mesh(g, vegMat); vm.castShadow = lod === 0; vm.receiveShadow = true;
+    if (pos.length || T.pos.length) {
+      vm = new THREE.Mesh(vegGeo(pos, col, sway, T.pos.length ? T : null), vegMat); vm.castShadow = lod === 0; vm.receiveShadow = true; vm.customDepthMaterial = vegDepth;
     }
     return [vm, pm];
   }
-  function desiredLod(d) { return d < 200 ? 0 : d < 540 ? 1 : 2; }
+  function desiredLod(d) { return d < 140 ? 0 : d < 540 ? 1 : 2; }
   function chunkDist(cx, cz, px, pz) { const dx = clamp(px, cx * CH, cx * CH + CH) - px, dz = clamp(pz, cz * CH, cz * CH + CH) - pz; return Math.hypot(dx, dz); }
   function buildChunk(cx, cz, lod) {
     const key = chKey(cx, cz); let c = chunks.get(key);
@@ -871,7 +942,7 @@
       const cx = pcx + a, cz = pcz + b; const d = chunkDist(cx, cz, px, pz); if (d > VIEW) continue;
       const lod = desiredLod(d); const c = chunks.get(chKey(cx, cz));
       if (!c) need.push([d, cx, cz, lod]);
-      else if (c.lod !== lod) { if (lod < c.lod || Math.abs(d - [200, 540][Math.min(lod, c.lod)]) > 30) need.push([d + (lod < c.lod ? 0 : 400), cx, cz, lod]); }
+      else if (c.lod !== lod) { if (lod < c.lod || Math.abs(d - [140, 540][Math.min(lod, c.lod)]) > 30) need.push([d + (lod < c.lod ? 0 : 400), cx, cz, lod]); }
     }
     need.sort((a, b) => a[0] - b[0]);
     for (const [d, cx, cz, lod] of need) {
