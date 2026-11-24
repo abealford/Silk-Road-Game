@@ -1198,7 +1198,7 @@
     // TEST (square kit): the redesigned town square, Constantinople only
     const KIT = window.SQUARE_KIT && window.SQUARE_KIT.has(city) ? window.SQUARE_KIT : null;
     const KL = KIT ? KIT.layout(city) : null;   // which way the square faces: away from the roads, inside the walls
-    const kTh = KIT ? KIT.orient(KL, theta, mainLines.concat(style === 'grid' ? [[[0, -half - 4], [0, half + 4]], [[-half - 4, 0], [half + 4, 0]]] : []), inside, style === 'grid') : theta;
+    const kTh = KIT ? KIT.plan(KL, theta, mainLines.map(pts => ({ pts: pts.filter(p => Math.hypot(p[0], p[1]) < R + 6), hw: style === 'grid' ? 3.6 : 3.0 })).concat(style === 'grid' ? [{ pts: [[0, -half - 4], [0, half + 4]], hw: 3.6 }, { pts: [[-half - 4, 0], [half + 4, 0]], hw: 3.6 }] : []), inside, style === 'grid') : theta;
     const kitUV = (x, z) => [x * Math.cos(kTh) + z * Math.sin(kTh), -x * Math.sin(kTh) + z * Math.cos(kTh)];
     const kitXZ = (u, v) => [u * Math.cos(kTh) - v * Math.sin(kTh), u * Math.sin(kTh) + v * Math.cos(kTh)];
     const kitSplit = pts => KIT ? KIT.split(pts, KL, kitUV) : [pts];

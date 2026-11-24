@@ -25,42 +25,115 @@ window.SQUARE_DEMO = true;
 window.SQUARE_KIT = (() => {
   const has = city => !!city;   // every city and town
 
-  // the layout for one city: square size, what is reserved and paved
+  // the layout for one city: square size and which pieces it gets
   function layout(city) {
     const town = city.tier <= 1, ven = !town;
     const s = town ? 10 : 13;          // half the square: 20 x 20 in towns, today's 26 x 26 in cities
-    const dN = 13 - s;                  // north pieces move south by dN, south pieces north by dN
-    const sq = typeof WORLD !== 'undefined' && WORLD.isSquare && WORLD.isSquare(city);   // grid cities have square walls, nearer the middle
-    const dV = city.tier === 2 ? (sq ? 7.5 : 5) : 0; // tier-2 cities: a shorter alley, the Scuola nearer the square
     const SQ = { u0: -s, u1: s, v0: -s, v1: s };
-    const PAVE = [], RESERVE = [];
-    RESERVE.push({ u0: -8.2, u1: 3.0, v0: -20.2 + dN, v1: -s, k: 'smith' });
-    RESERVE.push({ u0: -7.2, u1: 5.0, v0: s, v1: 21.4 - dN, k: 'tavern' });
-    RESERVE.push({ u0: 4.4, u1: 14.8, v0: s, v1: 18.8 - dN, k: 'stables' });
-    if (ven) {
-      PAVE.push({ u0: 6.4, u1: 11.6, v0: -24.2 + dV, v1: -s + .5, k: 'alley' });
-      RESERVE.push({ u0: 2.0, u1: 18.2, v0: -24.6 + dV, v1: -s, k: 'alleyHouses', noCorner: true });
-      RESERVE.push({ u0: 1.8, u1: 18.4, v0: -36.4 + dV, v1: -23.4 + dV, k: 'scuola' });
-    }
-    return { town, ven, s, dN, dV, SQ, PAVE, RESERVE };
+    return { id: city.id, town, ven, s, tier: city.tier, SQ, RESERVE: [], PAVE: [], place: {}, missing: [] };
   }
   const inR = (r, u, v) => u >= r.u0 && u <= r.u1 && v >= r.v0 && v <= r.v1;
   const blocked = (L, u, v) => (u >= L.SQ.u0 - 1 && u <= L.SQ.u1 + 1 && v >= L.SQ.v0 - 1 && v <= L.SQ.v1 + 1) || L.RESERVE.some(r => inR(r, u, v)) || L.PAVE.some(r => inR(r, u, v));
   const resample = (pts, step) => { const out = []; for (let i = 0; i < pts.length - 1; i++) { const [ax, az] = pts[i], [bx, bz] = pts[i + 1]; const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / step)); for (let k = 0; k < n; k++) out.push([ax + (bx - ax) * k / n, az + (bz - az) * k / n]); } if (pts.length) out.push(pts[pts.length - 1]); return out; };
 
-  // which way the kit faces: keep the city's roads out of the buildings and the buildings inside the walls
-  function orient(L, theta, lines, inside, grid) {
-    const P = []; for (const l of lines) for (const p of resample(l, 1.5)) if (Math.hypot(p[0], p[1]) < 46) P.push(p);
-    const corners = []; for (const r of L.RESERVE) if (!r.noCorner) for (const [u, v] of [[r.u0, r.v0], [r.u1, r.v0], [r.u0, r.v1], [r.u1, r.v1]]) corners.push([u, v]);
-    let best = theta, bs = 1e9; const N = grid ? 4 : 72;
-    for (let k = 0; k < N; k++) {
-      const a = grid ? k * Math.PI / 2 : theta + k / N * Math.PI * 2; const ca = Math.cos(a), sa = Math.sin(a); let sc = 0;
-      for (const p of P) { const u = p[0] * ca + p[1] * sa, v = -p[0] * sa + p[1] * ca; if (L.RESERVE.some(r => inR(r, u, v))) sc += 1; else if (L.PAVE.some(r => inR(r, u, v))) sc += .3; }
-      for (const [u, v] of corners) { const x = u * ca - v * sa, z = u * sa + v * ca; if (!inside(x, z, 0.8)) sc += 25; }
-      let da = Math.abs(((a - theta) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI); sc += da * .4;
-      if (sc < bs) { bs = sc; best = a; L.out = corners.filter(([u, v]) => !inside(u * ca - v * sa, u * sa + v * ca, 0.8)).length; L.roadHits = P.filter(p => { const u = p[0] * ca + p[1] * sa, v = -p[0] * sa + p[1] * ca; return L.RESERVE.some(r => inR(r, u, v)); }).length; }
+  // ---------- pieces and where they can go ----------
+  // Each piece is drawn in "home" coordinates (Constantinople's layout, a 26 x 26 square) against one edge of the
+  // square: N (v = -13), S (v = +13) or W (u = -13), centred at offset `a` along that edge. It can be turned onto any
+  // edge and slid along it. `rects` are its footprint with a small margin (inner: inside the square only).
+  const EDGES = { N: 0, W: Math.PI / 2, S: Math.PI, E: Math.PI * 1.5 };
+  const rot = (u, v, r) => [u * Math.cos(r) + v * Math.sin(r), -u * Math.sin(r) + v * Math.cos(r)];
+  function xform(pc, edge, a, s) {
+    const rH = EDGES[pc.edge], rT = EDGES[edge], r = rT - rH;
+    const nH = rot(0, -1, rH), eH = rot(1, 0, rH), nT = rot(0, -1, rT), eT = rot(1, 0, rT);
+    const hd = pc.hd === undefined ? 13 : pc.hd; const PH = [nH[0] * hd + eH[0] * pc.a, nH[1] * hd + eH[1] * pc.a], PT = [nT[0] * s + eT[0] * a, nT[1] * s + eT[1] * a];
+    const rp = rot(PH[0], PH[1], r); return { r, ou: PT[0] - rp[0], ov: PT[1] - rp[1], edge, a };
+  }
+  const xpt = (xf, u, v) => { const p = rot(u, v, xf.r); return [p[0] + xf.ou, p[1] + xf.ov]; };
+  const xrect = (xf, R) => { const c = [xpt(xf, R.u0, R.v0), xpt(xf, R.u1, R.v1)]; return { u0: Math.min(c[0][0], c[1][0]), u1: Math.max(c[0][0], c[1][0]), v0: Math.min(c[0][1], c[1][1]), v1: Math.max(c[0][1], c[1][1]), k: R.k }; };
+  function pieces(L) {
+    const P = [];
+    if (L.ven) for (const dV of (L.tier >= 3 ? [0, 5, 7.5] : [5, 7.5])) P.push({ name: 'ven', dV, edge: 'N', a: 9, cost: dV * .3,
+      rects: [{ u0: 2.0, u1: 18.2, v0: -24.6 + dV, v1: -12.3, k: 'alleyHouses' }, { u0: 1.8, u1: 18.4, v0: -36.4 + dV, v1: -23.4 + dV, k: 'scuola' }],
+      pave: { u0: 6.4, u1: 11.6, v0: -24.2 + dV, v1: -12.5 } });
+    // each building can also step 4 m into the square when the walls or roads leave no room behind it
+    for (const hd of [13, 9]) {
+      const c = hd === 13 ? 0 : 3;
+      P.push({ name: 'tavern', edge: 'S', a: -1, hd, cost: c, rects: [{ u0: -7.2, u1: 5.0, v0: 8.8, v1: 21.4, k: 'tavern' }] });
+      P.push({ name: 'stables', edge: 'S', a: 9.3, hd, cost: c, rects: [{ u0: 4.4, u1: 14.8, v0: 9.8, v1: 18.8, k: 'stables' }] });
+      P.push({ name: 'smith', edge: 'N', a: -2.5, hd, cost: c, rects: [{ u0: -8.2, u1: 3.0, v0: -20.2, v1: -8.2, k: 'smith' }] });
     }
-    return best;
+    // the market: full (shoppers in front), medium (no one in front), or compact (the Merchant and two stalls) to fit between roads
+    const colB = L.town ? [] : [{ u0: -13, u1: -9.6, v0: -11, v1: 11, k: 'market2' }];
+    P.push({ name: 'market', mv: 'full', edge: 'W', a: 0, inner: true, rects: [{ u0: -13, u1: -1.8, v0: -8.2, v1: 8.2, k: 'market' }].concat(colB) });
+    P.push({ name: 'market', mv: 'medium', edge: 'W', a: 0, inner: true, cost: 1, rects: [{ u0: -13, u1: -3.3, v0: -8.2, v1: 8.2, k: 'market' }].concat(colB) });
+    P.push({ name: 'market', mv: 'compact', edge: 'W', a: -1, inner: true, cost: 2.5, rects: [{ u0: -10.2, u1: -3.3, v0: -5.8, v1: 3.8, k: 'market' }] });
+    // ...or to the side: the same market just outside the square, its front on the square's edge, facing in
+    P.push({ name: 'market', mv: 'medium', edge: 'W', a: 0, hd: 3.3, cost: 4, rects: [{ u0: -13, u1: -3.3, v0: -8.2, v1: 8.2, k: 'market' }].concat(colB) });
+    P.push({ name: 'market', mv: 'compact', edge: 'W', a: -1, hd: 3.3, cost: 5, rects: [{ u0: -10.2, u1: -3.3, v0: -5.8, v1: 3.8, k: 'market' }] });
+    // last resort: the Merchant's stall alone
+    for (const hd of [13, 3.3]) P.push({ name: 'market', mv: 'tiny', edge: 'W', a: -1, hd, inner: hd === 13, cost: 7, rects: [{ u0: -7, u1: -3.3, v0: -5.8, v1: 3.8, k: 'market' }] });
+    return P;
+  }
+
+  // Choose the square's facing and put each piece where it keeps every road clear (with a walking margin)
+  // and stays inside the walls. Pieces keep their home spots when they can; if one fits nowhere, it is left out.
+  const planCache = new Map();
+  // a 1 m grid over the square's surroundings marking every cell too close to a road; query(rect) answers in O(1)
+  const GH = 62, GN = GH * 2;
+  function roadMap(R, inner, tight) {
+    const g = new Uint8Array(GN * GN);
+    for (const [u, v, m0] of R) {
+      if (inner && u * u + v * v < 30) continue; const m = (inner ? m0 - .9 : m0) - tight * 1.0;
+      const i0 = Math.max(0, Math.floor(u - m + GH)), i1 = Math.min(GN - 1, Math.floor(u + m + GH)), j0 = Math.max(0, Math.floor(v - m + GH)), j1 = Math.min(GN - 1, Math.floor(v + m + GH));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) g[j * GN + i] = 1;
+    }
+    const S = new Int32Array((GN + 1) * (GN + 1));
+    for (let j = 0; j < GN; j++) { let row = 0; for (let i = 0; i < GN; i++) { row += g[j * GN + i]; S[(j + 1) * (GN + 1) + i + 1] = S[j * (GN + 1) + i + 1] + row; } }
+    return r => { const i0 = Math.max(0, Math.floor(r.u0 + GH)), i1 = Math.min(GN, Math.ceil(r.u1 + GH)), j0 = Math.max(0, Math.floor(r.v0 + GH)), j1 = Math.min(GN, Math.ceil(r.v1 + GH)); if (i1 <= i0 || j1 <= j0) return false;
+      return S[j1 * (GN + 1) + i1] - S[j0 * (GN + 1) + i1] - S[j1 * (GN + 1) + i0] + S[j0 * (GN + 1) + i0] > 0; };
+  }
+  function plan(L, theta, lines, inside, grid) {
+    const ck = L.id; if (ck && planCache.has(ck)) { Object.assign(L, planCache.get(ck)); return L.phi; }
+    const s = L.s, roads = [];
+    for (const l of lines) for (const p of resample(l.pts, 1.2)) if (Math.hypot(p[0], p[1]) < s + 48) roads.push([p[0], p[1], l.hw + 1.4]);
+    const PCS = pieces(L); const OFFS = []; for (let a = -(s + 7); a <= s + 7; a += 1.5) OFFS.push(a); const ORDERS = [['ven', 'market', 'tavern', 'smith', 'stables'], ['ven', 'tavern', 'stables', 'smith', 'market'], ['market', 'ven', 'tavern', 'smith', 'stables']].map(o => o.filter(n => PCS.some(p => p.name === n)));
+    const maps = {}; let best = null; const N = grid ? 4 : 16; const base = grid ? Math.round(theta / (Math.PI / 2)) * Math.PI / 2 : theta;
+    const ks = []; for (let k = 0; k < N; k++) ks.push(k > N / 2 ? k - N : k); ks.sort((a, b) => Math.abs(a) - Math.abs(b));
+    for (const k of ks) for (const names of ORDERS) {
+      if (best && !best.missing.length && best.cost < 5) break;   // everything fits close to home: good enough
+      const phi = base + k / N * Math.PI * 2; const ca = Math.cos(phi), sa = Math.sin(phi);
+      if (!maps[k]) { const R = roads.map(([x, z, m]) => [x * ca + z * sa, -x * sa + z * ca, m]); maps[k] = [0, 1].map(inner => [0, 1].map(tight => roadMap(R, inner, tight))); }
+      const RM = maps[k];
+      const inWalls = (u, v) => inside(u * ca - v * sa, u * sa + v * ca, 0.8);
+      let da = Math.abs(((phi - theta) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+      let cost = da * .6; const placed = []; const out = {}; const missing = [];
+      for (const nm of names) {
+        let bc = null;
+        for (const tight of [0, 1]) { if (bc) break;
+        for (const pc of PCS.filter(p => p.name === nm)) for (const edge of ['N', 'S', 'W', 'E']) for (const a of [pc.a].concat(OFFS)) {
+          const xf = xform(pc, edge, a, s); const rs = pc.rects.map(r => xrect(xf, r));
+          let ok = true;
+          for (const r of rs) {   // cheapest checks first: square bounds, other pieces, roads, then the walls
+            if (pc.inner && (r.u0 < -s - .1 || r.u1 > s + .1 || r.v0 < -s - .1 || r.v1 > s + .1)) { ok = false; break; }
+            for (const q of placed) if (r.u0 < q.u1 + .4 && r.u1 > q.u0 - .4 && r.v0 < q.v1 + .4 && r.v1 > q.v0 - .4) { ok = false; break; }
+            if (!ok) break;
+            if (RM[pc.inner ? 1 : 0][tight](r)) { ok = false; break; }
+          }
+          if (ok && !pc.inner) for (const r of rs) if (!inWalls(r.u0, r.v0) || !inWalls(r.u1, r.v0) || !inWalls(r.u0, r.v1) || !inWalls(r.u1, r.v1)) { ok = false; break; }
+          if (!ok) continue;
+          let c = (pc.cost || 0) + tight * 6 + (edge !== pc.edge ? 3 : 0) + Math.abs(a - pc.a) * .15;
+          if (nm === 'stables' && out.tavern) { const t = out.tavern.rs[0], m = rs[0]; c += Math.hypot((t.u0 + t.u1 - m.u0 - m.u1) / 2, (t.v0 + t.v1 - m.v0 - m.v1) / 2) * .12; }
+          if (!bc || c < bc.c) bc = { c, xf, rs, pc };
+        } }
+        if (bc) { out[nm] = bc; placed.push(...bc.rs); cost += bc.c; } else { missing.push(nm); cost += nm === 'ven' ? 60 : 100; }
+      }
+      if (!best || cost < best.cost) best = { cost, phi, out, missing };
+    }
+    L.place = best.out; L.missing = best.missing; L.phi = best.phi;
+    L.RESERVE = []; L.PAVE = [];
+    for (const nm in best.out) { const b = best.out[nm]; for (const r of b.rs) L.RESERVE.push(r); if (b.pc.pave) L.PAVE.push(xrect(b.xf, b.pc.pave)); }
+    if (ck) planCache.set(ck, { place: L.place, missing: L.missing, phi: L.phi, RESERVE: L.RESERVE, PAVE: L.PAVE });
+    return best.phi;
   }
   // a street polyline with the pieces that cross the square or a kit building cut out
   function split(pts, L, uv) {
@@ -115,13 +188,16 @@ window.SQUARE_KIT = (() => {
     const wb = new B.Builder(); wb.rng = rng;   // walls and roofs (building material, textured)
     const pb = new B.Builder(); pb.rng = rng;   // props and furniture
     const kitInfo = { npcs: [], buildings: [], lights: [], city };
-    const OFF = { v: 0 };                        // the current section's shift along v (towns pull pieces toward the square)
-    const section = (dv, fn) => { OFF.v = dv; pb.push(0, 0, dv); wb.push(0, 0, dv); fn(); wb.pop(); pb.pop(); OFF.v = 0; };
+    // the current transform: a piece turned by r and moved by (ou, ov), then a section's shift dv along its own v
+    const XF = { r: 0, ou: 0, ov: 0, dv: 0 };
+    const P = (u, v) => { const q = rot(u, v + XF.dv, XF.r); return [q[0] + XF.ou, q[1] + XF.ov]; };
+    const place = (xf, fn) => { Object.assign(XF, { r: xf.r, ou: xf.ou, ov: xf.ov, dv: 0 }); pb.push(xf.ou, 0, xf.ov, xf.r); wb.push(xf.ou, 0, xf.ov, xf.r); fn(); wb.pop(); pb.pop(); Object.assign(XF, { r: 0, ou: 0, ov: 0, dv: 0 }); };
+    const section = (dv, fn) => { XF.dv = dv; pb.push(0, 0, dv); wb.push(0, 0, dv); fn(); wb.pop(); pb.pop(); XF.dv = 0; };
 
     // ---------- colliders in kit space ----------
-    const segCol = (u0, v0, u1, v1, r) => { if (!firstBuild) return; const a = toWorld(u0, v0 + OFF.v), b = toWorld(u1, v1 + OFF.v); addCollider({ seg: [a[0], a[1], b[0], b[1]], r }); };
-    const rectCol = (u0, v0, u1, v1) => { if (!firstBuild) return; const c = toWorld((u0 + u1) / 2, (v0 + v1) / 2 + OFF.v); addCollider({ rect: [c[0], c[1], (u1 - u0) / 2, (v1 - v0) / 2, -theta] }); };
-    const circCol = (u, v, r) => { if (!firstBuild) return; const c = toWorld(u, v + OFF.v); addCollider({ x: c[0], z: c[1], r }); };
+    const segCol = (u0, v0, u1, v1, r) => { if (!firstBuild) return; const a = toWorld(...P(u0, v0)), b = toWorld(...P(u1, v1)); addCollider({ seg: [a[0], a[1], b[0], b[1]], r }); };
+    const rectCol = (u0, v0, u1, v1) => { if (!firstBuild) return; const c = toWorld(...P((u0 + u1) / 2, (v0 + v1) / 2)); addCollider({ rect: [c[0], c[1], (u1 - u0) / 2, (v1 - v0) / 2, -theta + XF.r] }); };
+    const circCol = (u, v, r) => { if (!firstBuild) return; const c = toWorld(...P(u, v)); addCollider({ x: c[0], z: c[1], r }); };
 
     let curFloor = K.floorW;
     // ---------- walls with openings ----------
@@ -194,7 +270,7 @@ window.SQUARE_KIT = (() => {
         top = h + uh;
       }
       roofOn(cu, top, cv, W2, D2, roof, 1.4, col);
-      kitInfo.buildings.push({ name: spec.name, u0, v0: v0 + OFF.v, u1, v1: v1 + OFF.v });
+      kitInfo.buildings.push({ name: spec.name, at: P(cu, cv) });
     }
 
     // a closed town house (not enterable), two storeys, shuttered windows on given faces
@@ -219,24 +295,26 @@ window.SQUARE_KIT = (() => {
 
     const person = (pc, role, v, u, vv, face, opt = {}) => {
       const kitL = HOOKS.lifeKit; if (!kitL || !kitL.makePerson) return null;
-      const V = vv + OFF.v;
-      const p = kitL.makePerson(pc, role, v); p.position.set(u, opt.y || 0, V); p.rotation.y = face;
+      const [U, V] = P(u, vv); face += XF.r;
+      const p = kitL.makePerson(pc, role, v); p.position.set(U, opt.y || 0, V); p.rotation.y = face;
       if (opt.sit) { p.position.y = -.17; for (const l of p.userData.legs) l.rotation.x = -1.45; }
       crowd.add(p); circCol(u, vv, .35);
-      const n = { obj: p, u, v: V, face, talk: !!opt.label, idle: Math.random() * 6 };
-      if (opt.label && kitL.textSprite) { const s = kitL.textSprite(opt.label); s.position.set(u, opt.labelY || (opt.sit ? 2.1 : 2.55), V); crowd.add(s); n.label = s; }
+      const n = { obj: p, u: U, v: V, face, talk: !!opt.label, idle: Math.random() * 6 };
+      if (opt.label && kitL.textSprite) { const s = kitL.textSprite(opt.label); s.position.set(U, opt.labelY || (opt.sit ? 2.1 : 2.55), V); crowd.add(s); n.label = s; }
       kitInfo.npcs.push(n); return p;
     };
-    const animal = (kind, u, vv, f, v) => { const kitL = HOOKS.lifeKit; if (!kitL || !kitL.makeAnimal) return; const a = kitL.makeAnimal(kind, false, v); a.position.set(u, 0, vv + OFF.v); a.rotation.y = f; crowd.add(a); kitInfo.npcs.push({ obj: a, u, v: vv + OFF.v, animal: true, idle: rng() * 6 }); circCol(u, vv, .9); };
+    const animal = (kind, u, vv, f, v) => { const kitL = HOOKS.lifeKit; if (!kitL || !kitL.makeAnimal) return; const a = kitL.makeAnimal(kind, false, v); const [U, V] = P(u, vv); a.position.set(U, 0, V); a.rotation.y = f + XF.r; crowd.add(a); kitInfo.npcs.push({ obj: a, u: U, v: V, animal: true, idle: rng() * 6 }); circCol(u, vv, .9); };
     const face = (du, dv) => Math.atan2(du, dv);
-    const sign = (text, u, y, v, ry, w, h, bg, fg, size) => { const s = signMesh(text, w, h, bg, fg, { size }); s.position.set(u, y, v + OFF.v); s.rotation.y = ry; kit.add(s); return s; };
+    const sign = (text, u, y, v, ry, w, h, bg, fg, size) => { const s = signMesh(text, w, h, bg, fg, { size }); const [U, V] = P(u, v); s.position.set(U, y, V); s.rotation.y = ry + XF.r; kit.add(s); return s; };
     const furn = (k, u, v, ry = 0, col = .9) => { pb.push(u, -.05, v, ry); B.FURN[k](pb, rng); pb.pop(); if (col) circCol(u, v, col); };
-    const lamp = (u, y, v, c, i, d) => { kitInfo.lights.push({ u, y, v: v + OFF.v, c, i, d }); if (y > 2) { pb.cyl(u, y + .15, v, .02, .02, .6, K.iron, 4); pb.box(u, y - .25, v, .28, .4, .28, 0xffd88a); } };
+    const lamp = (u, y, v, c, i, d) => { const [U, V] = P(u, v); kitInfo.lights.push({ u: U, y, v: V, c, i, d }); if (y > 2) { pb.cyl(u, y + .15, v, .02, .02, .6, K.iron, 4); pb.box(u, y - .25, v, .28, .4, .28, 0xffd88a); } };
 
-    const { town, ven, s: S, dN, dV } = L;
+    const { town } = L; const PL = L.place;
     const E = Math.PI / 2;   // facing +u (east, toward the middle of the square)
 
-    // ================= the market: west half of the square =================
+    // ================= the market: inside the square, its back to one edge =================
+    if (PL.market) place(PL.market.xf, () => {
+    const mv = PL.market.pc.mv;
     // The Merchant stands in the middle of one long stall, nothing between him and you but the counter.
     pb.box(-4.0, 0, -1, .9, .78, 5.4, K.woodD); pb.box(-4.0, .78, -1, 1.05, .07, 5.6, K.wood);                // the counter
     { const goods = [0xd08a2a, 0xb0402c, 0x7a9a3a, 0xc9a06a, 0x2c5fa8, 0xe0c060]; for (let k = 0; k < 9; k++) { const v = -3.4 + k * .6; const c = goods[k % goods.length]; if (k % 2) pb.cone(-3.95, .85, v, .2, .32, c, 6); else pb.box(-3.95, .85, v, .42, .16 + (k % 3) * .06, .42, c); } }
@@ -249,18 +327,21 @@ window.SQUARE_KIT = (() => {
     rectCol(-6.5, -3.8, -3.5, 1.8);
     person(cul, 'rich', 1, -5.0, -1, face(1, 0), { label: 'Merchant', labelY: 3.75 });
     // the stalls behind him, in one or two staggered rows
-    const stalls = [[-8.6, -6.6], [-8.6, -1], [-8.6, 4.6]].concat(town ? [] : [[-12, -9.4], [-12, -3.8], [-12, 1.8], [-12, 7.4]]);
+    const stalls = mv === 'tiny' ? [] : mv === 'compact' ? [[-8.6, -3.5], [-8.6, 1.5]] : [[-8.6, -6.6], [-8.6, -1], [-8.6, 4.6]].concat(town ? [] : [[-12, -9.4], [-12, -3.8], [-12, 1.8], [-12, 7.4]]);
     stalls.forEach(([u, v], i) => {
       pb.push(u, -.05, v, E); B.FURN.stall(pb, rng, cul); pb.pop(); rectCol(u - 1, v - 1.45, u + 1, v + 1.45);
       if (i !== 5) person(cul, i % 3 ? 'plain' : 'rich', i % 5, u - .6, v, face(1, 0));
     });
-    for (const [k, u, v] of (town ? [['sacks', -6.8, -9.0]] : [['barrels', -10.3, -9.6], ['crates', -10.3, 8.4], ['sacks', -6.8, -9.4], ['jars', -12.2, 10.2]])) furn(k, u, v, rng() * 6, .8);
-    for (const [u, v, f, k, r] of [[-6.7, -5.2, face(-1, -.3), 0, 'plain'], [-6.6, 3.3, face(-1, .4), 1, 'rich'], [-2.4, 1.8, face(-1, -.8), 4, 'rich'], [-2.3, -3.6, face(-1, .6), 0, 'plain']]
+    for (const [k, u, v] of (town || mv === 'compact' || mv === 'tiny' ? [] : [['barrels', -10.3, -9.6], ['crates', -10.3, 8.4], ['jars', -12.2, 10.2]])) furn(k, u, v, rng() * 6, .8);
+    if (mv !== 'compact' && mv !== 'tiny') for (const [u, v, f, k, r] of [[-6.7, -5.2, face(-1, -.3), 0, 'plain'], [-6.6, 3.3, face(-1, .4), 1, 'rich']]
+      .concat(mv === 'full' ? [[-2.4, 1.8, face(-1, -.8), 4, 'rich'], [-2.3, -3.6, face(-1, .6), 0, 'plain']] : [])
       .concat(town ? [] : [[-10.3, -1.6, face(-1, 0), 2, 'plain'], [-10.2, 4.0, face(-1, .3), 3, 'plain'], [-10.4, -6.8, face(-1, 0), 1, 'plain']])) person(cul, r, k, u, v, f);
-    for (const [u, v, f, k] of [[3.5, 3, 2.2, 2], [4.4, 3.6, 4.6, 3], [1.5, -5.5, 3.6, 0], [7, -5, .5, 4]]) person(cul, 'plain', k, u, v, f);
+    });
+    // a few people crossing the square, where nothing stands
+    for (const [u, v, f, k] of [[3.5, 3, 2.2, 2], [4.4, 3.6, 4.6, 3], [1.5, -5.5, 3.6, 0], [7, -5, .5, 4], [-4, 6, 1.2, 1], [-5, -6, 4, 3]]) if (!L.RESERVE.some(r => u > r.u0 - 1 && u < r.u1 + 1 && v > r.v0 - 1 && v < r.v1 + 1) && Math.abs(u) < L.s - 1 && Math.abs(v) < L.s - 1) person(cul, 'plain', k, u, v, f);
 
     // ================= the blacksmith: north edge of the square =================
-    section(dN, () => {
+    if (PL.smith) place(PL.smith.xf, () => {
       building({ name: 'Blacksmith', u0: -7, v0: -19, u1: 2, v1: -10, h: 4.0, t: .6, bands: [1.5, 3.0], roof: roofKind === 'flat' ? 'flat' : 'gable', floor: K.floorS, col: banded ? K.stone2 : wallCol, surf: banded ? 'rubble' : wallSurf,
         ops: { S: [{ at: -2.5, w: 2.6, h: 2.9, door: true }, { at: -5.3, w: 1.1, h: 1.0, y0: 1.5 }, { at: .5, w: 1.1, h: 1.0, y0: 1.5 }], E: [{ at: -15.5, w: 1.1, h: 1.0, y0: 1.6 }] } });
       pb.box(-5.1, 0, -16.9, 2.4, 1.0, 2.4, K.stone2); pb.box(-5.1, .98, -16.9, 1.8, .1, 1.8, K.dark);
@@ -295,8 +376,8 @@ window.SQUARE_KIT = (() => {
     });
 
     // ================= the Venetian Quarter (cities only): an alley north to the Scuola di San Marco =================
-    if (ven) {
-      const vb = -24.2 + dV;   // where the alley ends at the Scuola's door
+    if (PL.ven) place(PL.ven.xf, () => {
+      const dV = PL.ven.pc.dV; const vb = -24.2 + dV;   // where the alley ends at the Scuola's door
       townHouse(2.5, vb, 6.4, -12.5, 6.2, ['E', 'S']);
       townHouse(11.6, vb, 17.2, -12.5, 6.2, ['W', 'S']);
       if (!dV) { pb.box(7.0, 3.6, -19.5, 1.2, .12, 3.0, K.woodD); for (const z of [-20.9, -18.1]) pb.box(7.5, 3.6, z, .06, .9, .06, K.woodD); pb.box(7.5, 4.45, -19.5, .06, .06, 3.0, K.woodD); }
@@ -333,10 +414,10 @@ window.SQUARE_KIT = (() => {
         person('byz', 'plain', 2, 9.5, -26.6, face(0, -1));
         lamp(7, 4.8, -29.5, 0xffd29a, 12, 12); lamp(12.5, 4.8, -29.5, 0xffd29a, 10, 12);
       });
-    }
+    });
 
     // ================= the tavern: south edge of the square =================
-    section(-dN, () => {
+    if (PL.tavern) place(PL.tavern.xf, () => {
       building({ name: 'Tavern', u0: -6, v0: 10, u1: 4, v1: 20, h: 4.2, t: .6, bands: [1.5, 3.1], upper: roofKind === 'flat' ? null : { h: 2.8 }, floor: K.floorW, col: banded ? K.plaster2 : wallCol,
         ops: { N: [{ at: -1, w: 2.4, h: 3.0, door: true }, { at: -4.2, w: 1.1, h: 1.3, y0: 1.3 }, { at: 2.3, w: 1.1, h: 1.3, y0: 1.3 }],
           E: [{ at: 13, w: 1.1, h: 1.3, y0: 1.3 }, { at: 16, w: 1.1, h: 1.3, y0: 1.3 }], W: [{ at: 12, w: 1.1, h: 1.3, y0: 1.3 }] } });
@@ -368,8 +449,10 @@ window.SQUARE_KIT = (() => {
       pb.cyl(2.3, .79, 14.9, .05, .05, .2, 0xf0e6d2, 6); pb.box(2.0, .79, 15.1, .35, .05, .26, 0xe8dcc0); pb.box(3.0, 0, 13.6, .7, .45, .5, K.woodD); pb.box(3.0, .18, 13.33, .72, .05, .04, K.gold);
       person(cul, 'rich', 0, 2.95, 15.4, face(-1, -.3), { sit: true, label: 'Broker' });
       lamp(-3.6, 1.6, 14.6, 0xffa050, 10, 9); lamp(.3, 3.2, 14.0, 0xffc080, 9, 10);
+    });
 
-      // ================= the stables: outdoors, beside the tavern =================
+    // ================= the stables: outdoors =================
+    if (PL.stables) place(PL.stables.xf, () => {
       const fence = (u0, v0, u1, v1) => { const L2 = Math.hypot(u1 - u0, v1 - v0), n = Math.max(1, Math.round(L2 / 2.2));
         for (let k = 0; k <= n; k++) { const u = u0 + (u1 - u0) * k / n, v = v0 + (v1 - v0) * k / n; pb.box(u, 0, v, .16, 1.3, .16, K.woodD); }
         const ry = Math.atan2(-(v1 - v0), u1 - u0); for (const y of [.55, 1.05]) pb.box((u0 + u1) / 2, y, (v0 + v1) / 2, L2, .1, .08, K.wood, ry); segCol(u0, v0, u1, v1, .12); };
@@ -423,5 +506,5 @@ window.SQUARE_KIT = (() => {
     }
   }
 
-  return { has, layout, orient, split, blocked, build, frame, kits };
+  return { has, layout, plan, split, blocked, build, frame, kits };
 })();
