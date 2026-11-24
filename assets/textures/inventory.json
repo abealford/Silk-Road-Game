@@ -1,0 +1,242 @@
+{
+ "bark-pale": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://polyhaven.com/a/tree_bark_03",
+  "what": "pale bark with moss (poplar, beech)"
+ },
+ "bark-pine": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://polyhaven.com/a/pine_bark",
+  "what": "pine bark"
+ },
+ "bark-sakura": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://polyhaven.com/a/sakura_bark",
+  "what": "smooth brown bark (fruit trees, broadleaf)"
+ },
+ "dry-earth": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=Ground111",
+  "what": "dry reddish earth and gravel"
+ },
+ "forest-floor-leaves": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=ScatteredLeaves008",
+  "what": "autumn leaves on the ground"
+ },
+ "grass-blades": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "opacity.png"
+  ],
+  "source": "https://polyhaven.com/a/grass_medium_01",
+  "what": "grass blade atlas with alpha (for grass cards)"
+ },
+ "ground-grass-patchy": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=Ground037",
+  "what": "patchy grass over dirt"
+ },
+ "ground-meadow": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=Ground003",
+  "what": "grass and dirt meadow ground"
+ },
+ "leaves-broadleaf": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "opacity.png"
+  ],
+  "source": "https://ambientcg.com/view?id=LeafSet024",
+  "what": "broadleaf leaf set with opacity"
+ },
+ "paving-fan": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=PavingStones150",
+  "what": "small cobbles in fan arcs"
+ },
+ "paving-rubble": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=PavingStones153",
+  "what": "irregular flagstones"
+ },
+ "paving-setts": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=PavingStones138",
+  "what": "stone setts in rows"
+ },
+ "sand": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "ao.jpg"
+  ],
+  "source": "https://ambientcg.com/view?id=Ground080",
+  "what": "rippled desert sand"
+ },
+ "stone-ashlar-grey": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://polyhaven.com/a/medieval_blocks_03",
+  "what": "grey squared ashlar blocks"
+ },
+ "stone-blocks-warm": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://polyhaven.com/a/medieval_blocks_05",
+  "what": "warm limestone blocks (Acre, the Levant)"
+ },
+ "stone-rubble-warm": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://polyhaven.com/a/medieval_blocks_02",
+  "what": "warm limestone rubble wall"
+ },
+ "stone-wall-slate": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://polyhaven.com/a/castle_wall_slates",
+  "what": "grey rubble wall of slates"
+ },
+ "thatch-reed": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://polyhaven.com/a/reed_roof_04",
+  "what": "reed thatch roof"
+ },
+ "tree-island-01/branches": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://polyhaven.com/a/island_tree_01",
+  "what": "a tree model's textures: trunk, branches, leaves with alpha (the .blend model itself is not imported) \u2014 branches"
+ },
+ "tree-island-01/leaves": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg",
+   "opacity.png"
+  ],
+  "source": "https://polyhaven.com/a/island_tree_01",
+  "what": "a tree model's textures: trunk, branches, leaves with alpha (the .blend model itself is not imported) \u2014 leaves"
+ },
+ "tree-island-01/trunk": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://polyhaven.com/a/island_tree_01",
+  "what": "a tree model's textures: trunk, branches, leaves with alpha (the .blend model itself is not imported) \u2014 trunk"
+ },
+ "wood-boards-studded": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://polyhaven.com/a/medieval_wood",
+  "what": "vertical boards with iron studs (doors)"
+ },
+ "wood-planks": {
+  "license": "CC0",
+  "maps": [
+   "color.jpg",
+   "normal.jpg",
+   "rough.jpg"
+  ],
+  "source": "https://polyhaven.com/a/wood_planks",
+  "what": "horizontal wooden planks"
+ }
+}
