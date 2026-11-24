@@ -15,11 +15,17 @@ culture palettes stay in charge of the colour and the texture brings the detail 
 
 Sources are the CC0 textures in assets/textures/. Since v22.2b every layer is a photo; the drawn generators (gen_rock and friends) are kept
 for reference and as fallbacks.
-Needs: pillow numpy
+v22.2d: every photo layer is stylized (tools/textures/stylize.py: painterly smoothing, tone bands, painted edges,
+softer bumps), non-tileable photos lose their repeat seam, and the ground layers' contrast is evened out. The normal
+map's blue channel now carries the layer's HEIGHT (0..1) for height-based blending in the shaders; the shaders only
+ever used x and y.
+Needs: pillow numpy scipy
 """
-import os, io, json, base64
+import os, io, json, base64, sys
 import numpy as np
 from PIL import Image
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import stylize as ST
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TEX = os.path.join(ROOT, 'assets', 'textures')
@@ -258,35 +264,70 @@ def prep_colour(name, im):
     return Image.fromarray(np.clip(a, 0, 255).astype(np.uint8))
 
 
-def build(table):
-    out = []
-    for name, src, scale, k, own in table:
-        if callable(src):
-            col, (h, strength) = src()
+def source_layer(name, src):
+    """Colour (PIL RGB), normal (PIL RGB) and height (float 0..1, colour's size) for one layer, seamless."""
+    if callable(src):
+        col, (h, strength) = src()
+        nrm = normal_from_height(h, strength * N / 64)
+        return col, nrm, h
+    col, nrm = load(src, 'color.jpg'), load(src, 'normal.jpg')
+    p = os.path.join(TEX, src, 'ao.jpg')
+    ao = squared(Image.open(p).convert('L')).resize(col.size) if os.path.exists(p) else None
+    if name == 'thatch':
+        w, h = col.size
+        cut = lambda im: im.crop((0, int(h * .06), w, h)).resize((w, h))
+        col, nrm = cut(col), cut(nrm); ao = cut(ao) if ao else None
+    if nrm.size != col.size: nrm = nrm.resize(col.size, Image.LANCZOS)
+    ims, (rx, ry) = ST.make_tileable([col, nrm] + ([ao] if ao else []))
+    if max(rx, ry) >= 2.0: print(f'  {name}: seam removed (x {rx:.1f}, y {ry:.1f})')
+    col, nrm = ims[0], ims[1]; ao = ims[2] if ao else None
+    h = ST.height_from_normal(np.asarray(nrm))
+    if ao is not None: h = .7 * h + .3 * np.asarray(ao, np.float64) / 255
+    h = np.clip(.85 * h + .15 * np.asarray(col.convert('L'), np.float64) / 255, 0, 1)
+    return col, nrm, h
 
-            hs = np.asarray(Image.fromarray(h.astype(np.float32), "F").resize((NS, NS), Image.BOX))
-            nrm = normal_from_height(hs, strength * NS / 64)
-        else:
-            col, nrm = load(src, 'color.jpg'), load(src, 'normal.jpg')
-            if name == 'thatch':
-                w, h = col.size
-                col, nrm = col.crop((0, int(h * .06), w, h)).resize((w, h)), nrm.crop((0, int(h * .06), w, h)).resize((w, h))
-        col = wrap_resize(prep_colour(name, col), CS)
-        if nrm.size[0] != NS: nrm = wrap_resize(nrm, NS)
-        a = np.asarray(nrm).astype(np.float32) / 127.5 - 1      # remove any overall tilt so a wall stays lit as a wall
-        a[..., :2] -= a[..., :2].mean((0, 1)); a[..., 2] = np.maximum(a[..., 2], .2)
-        a /= np.linalg.norm(a, axis=-1, keepdims=True)
-        nrm = Image.fromarray(np.clip((a + 1) * 127.5, 0, 255).astype(np.uint8))
-        mean = srgb_to_lin(np.asarray(col).astype(np.float32)).reshape(-1, 3).mean(0)
+
+def resize_f(h, size):
+    return np.asarray(wrap_resize(Image.fromarray((np.clip(h, 0, 1) * 255).astype(np.uint8)), size), np.float64) / 255
+
+
+OVERRIDE = {'rock': dict(contrast=.72, bands=5)}     # cliff rock: big light patches looked cloudy at the Balanced contrast
+STRUCTURED = {'rock', 'setts', 'flags', 'fan'}     # ground layers with shapes to keep: no calming blur, no contrast matching
+
+
+def build(table, ground):
+    layers = []
+    for name, src, scale, k, own in table:
+        col, nrm, h = source_layer(name, src)
+        col = np.asarray(wrap_resize(prep_colour(name, col), CS))
+        hc = resize_f(h, CS)
+        col = ST.stylize_colour(col, hc, ground=ground and name not in STRUCTURED, S=dict(ST.STYLE, **OVERRIDE.get(name, {})))
+        layers.append([name, scale, k, own, col, nrm, h])
+    if ground:   # even out the contrast between ground photos shot by different photographers (soil and grass layers)
+        soft = [L for L in layers if L[0] not in STRUCTURED]
+        cols = ST.harmonize([L[4] for L in soft], ST.STYLE['harmony'])
+        for L, c in zip(soft, cols): L[4] = c
+    out = []
+    for name, scale, k, own, col, nrm, h in layers:
+        nr = np.asarray(wrap_resize(nrm, NS)).astype(np.float32) / 127.5 - 1      # remove any overall tilt so a wall stays lit as a wall
+        nr[..., :2] -= nr[..., :2].mean((0, 1)); nr[..., 2] = np.maximum(nr[..., 2], .2)
+        nr /= np.linalg.norm(nr, axis=-1, keepdims=True)
+        a = ST.stylize_normal(np.clip((nr + 1) * 127.5, 0, 255).astype(np.uint8))
+        hn = resize_f(h, NS)
+        hn = np.clip(.5 + (hn - ST.blur(hn, NS // 16, 2)) * 1.6, 0, 1)        # high-passed: 0.5 is the layer's average
+        enc = np.dstack([(a[..., 0] + 1) * 127.5, (a[..., 1] + 1) * 127.5, hn * 255])
+        nrm_img = Image.fromarray(np.clip(enc, 0, 255).astype(np.uint8))
+        col_img = Image.fromarray(col)
+        mean = srgb_to_lin(col.astype(np.float32)).reshape(-1, 3).mean(0)
         out.append({'name': name, 'scale': scale, 'k': k, 'own': own, 'mean': [round(float(x), 4) for x in mean],
-                    'col': webp(col, QC), 'nrm': webp(nrm, QN)})
-        print(f'  {name:10s} {len(out[-1]["col"]) // 1024:4d} KB + {len(out[-1]["nrm"]) // 1024:3d} KB  mean {out[-1]["mean"]}')
+                    'col': webp(col_img, QC), 'nrm': webp(nrm_img, QN)})
+        print(f'  {name:12s} {len(out[-1]["col"]) // 1024:4d} KB + {len(out[-1]["nrm"]) // 1024:3d} KB  mean {out[-1]["mean"]}')
     return out
 
 
 def main():
-    print('ground'); g = build(GROUND)
-    print('build'); b = build(BUILD)
+    print('ground'); g = build(GROUND, True)
+    print('build'); b = build(BUILD, False)
     data = {'cs': CS, 'ns': NS, 'ground': g, 'build': b}
     js = '// GENERATED by tools/textures/build_surfaces.py: do not edit.\nconst SURF_DATA = ' + json.dumps(data, separators=(',', ':')) + ';\n'
     open(OUT, 'w').write(js)

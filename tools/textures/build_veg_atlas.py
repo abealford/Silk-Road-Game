@@ -15,6 +15,9 @@ import os, io, json, math, base64, random
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 from scipy import ndimage
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import stylize as ST
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 TEX = os.path.join(ROOT, 'assets', 'textures')
@@ -403,6 +406,11 @@ def main():
     cells['fern'] = single_card(spFern, tint=(0.95, 1.0, 0.9)) if spFern else fern_card(25)
     cells['white'] = Image.new('RGBA', (S, S), (255, 255, 255, 255))
 
+    # v22.2d: the same stylized look as the ground and buildings (tools/textures/stylize.py), on everything from photos
+    for name in ('barkPine', 'barkPale', 'barkSakura', 'barkRough', 'leafA', 'leafB', 'leafNarrow', 'leafC', 'leafSmall', 'needle', 'scale', 'fern'):
+        a = np.asarray(cells[name].convert('RGBA'))
+        rgb = ST.stylize_colour(a[..., :3].copy(), None, ground=False)
+        cells[name] = Image.fromarray(np.dstack([rgb, a[..., 3]]), 'RGBA')
     atlas = Image.new('RGBA', (S * 4, S * 4), (255, 255, 255, 255))
     for name, (c, r) in LAYOUT.items():
         atlas.paste(cells[name], (c * S, r * S))

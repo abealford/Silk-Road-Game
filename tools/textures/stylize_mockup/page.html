@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Silk Road — Stylized Texture Mockup</title>
+<style>
+  :root {
+    --bg: #17140f; --panel: #221d16; --panel2: #2b241b; --line: #3a3126; --text: #efe6d6; --muted: #a8997f;
+    --accent: #e0a64a; --accent2: #6fb3a6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  header { padding: 22px 28px 14px; border-bottom: 1px solid var(--line); }
+  header h1 { margin: 0 0 4px; font: 600 22px Georgia, "Times New Roman", serif; letter-spacing: .3px; }
+  header p { margin: 0; color: var(--muted); max-width: 900px; }
+  .wrap { display: grid; grid-template-columns: 300px 1fr; gap: 0; min-height: calc(100vh - 80px); }
+  aside { background: var(--panel); border-right: 1px solid var(--line); padding: 16px 18px 40px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+  main { padding: 20px 28px 60px; min-width: 0; }
+  h2 { font: 600 17px Georgia, serif; margin: 0 0 4px; }
+  h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--accent); margin: 20px 0 8px; }
+  .sub { color: var(--muted); margin: 0 0 14px; max-width: 860px; }
+  .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  button { background: var(--panel2); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 8px; font: inherit; font-size: 13px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent); color: #1b150c; border-color: var(--accent); font-weight: 600; }
+  .ctl { margin: 9px 0; }
+  .ctl label { display: flex; justify-content: space-between; font-size: 13px; }
+  .ctl label span:last-child { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .ctl small { display: block; color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 3px 0 0; }
+  .viewer { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; }
+  .stage { position: relative; user-select: none; }
+  .stage canvas { display: block; border-radius: 8px; background: #000; }
+  .tag { position: absolute; top: 10px; padding: 3px 9px; border-radius: 4px; font-size: 12px; font-weight: 600; background: rgba(0,0,0,.6); pointer-events: none; }
+  .tag.l { left: 10px; } .tag.r { right: 10px; color: var(--accent); }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .side { flex: 1; min-width: 260px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+  .thumb { background: var(--panel); border: 2px solid transparent; border-radius: 8px; padding: 5px; cursor: pointer; }
+  .thumb.sel { border-color: var(--accent); }
+  .thumb canvas { width: 100%; display: block; border-radius: 4px; aspect-ratio: 1; }
+  .thumb div { font-size: 11.5px; margin-top: 4px; color: var(--muted); text-align: center; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 10px 0; }
+  section { margin-bottom: 44px; }
+  .patchStage canvas { width: 100%; height: auto; } #big { cursor: ew-resize; }
+  .legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px 22px; margin-top: 12px; color: var(--muted); font-size: 12.5px; }
+  .legend b { color: var(--text); font-weight: 600; }
+  textarea { width: 100%; height: 120px; background: #120f0b; color: var(--accent2); border: 1px solid var(--line); border-radius: 6px; font: 11.5px ui-monospace, Menlo, monospace; padding: 8px; }
+  .busy { position: fixed; right: 16px; bottom: 16px; background: var(--accent); color: #1b150c; padding: 6px 12px; border-radius: 6px; font-weight: 600; font-size: 12px; opacity: 0; transition: opacity .15s; }
+  .busy.show { opacity: 1; }
+  .note { background: var(--panel); border-left: 3px solid var(--accent2); padding: 10px 14px; border-radius: 4px; color: var(--muted); font-size: 13px; max-width: 900px; }
+  @media (max-width: 900px) { .wrap { grid-template-columns: 1fr; } aside { position: static; height: auto; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Stylized textures and smoother blends: mockup</h1>
+  <p>Built from the game's real textures, processed live in your browser. Drag across the texture view to slide between <b>Now</b> (the photo textures in v22.2c) and <b>Stylized</b>. Pick a preset, then fine-tune with the sliders. The settings you land on go straight into the texture build script.</p>
+</header>
+<div class="wrap">
+<aside>
+  <h3 style="margin-top:4px">Preset</h3>
+  <div class="presets" id="presets"></div>
+
+  <h3>Texture style</h3>
+  <div id="ctlTex"></div>
+
+  <h3>Ground blending</h3>
+  <div id="ctlBlend"></div>
+
+  <h3>Settings to build with</h3>
+  <textarea id="out" readonly></textarea>
+  <button id="copy" style="margin-top:6px;width:100%">Copy settings</button>
+</aside>
+<main>
+  <section>
+    <h2>1. Texture style</h2>
+    <p class="sub">The selected texture is shown lit by a low sun from the upper left, the way the game lights it, so you see the bump maps as well as the colours.</p>
+    <div class="viewer">
+      <div>
+        <div class="stage" id="bigStage">
+          <canvas id="big" width="640" height="640"></canvas>
+          <div class="tag l">Now (photo)</div><div class="tag r">Stylized</div>
+        </div>
+        <div class="row">
+          <button id="vTiled" class="on">Tiled 2×2</button>
+          <button id="vClose">Close-up 1:1</button>
+          <span class="hint">Drag across the picture to compare.</span>
+        </div>
+      </div>
+      <div class="side">
+        <div class="row" style="margin-top:0"><b id="selName" style="font-size:15px"></b></div>
+        <div class="grid" id="grid"></div>
+        <div class="row"><button id="holdBefore">Hold to see all "Now"</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. Ground blending</h2>
+    <p class="sub">A 15 × 7.5 m patch of ground, seen from above, with meadow, dry steppe, sand, a rock outcrop, a dirt road and the edge of a paved square. <b>Top:</b> how v22.2c blends now (photo textures, straight crossfades along the terrain grid, hard road and paving edges). <b>Bottom:</b> stylized textures with height-based blending, broken-up borders, matched colours and a dirt fringe at the paving.</p>
+    <div class="stage patchStage" id="patchStage">
+      <canvas id="patchA" width="1200" height="600"></canvas>
+      <div class="tag l">Now (v22.2c)</div>
+    </div>
+    <div class="stage patchStage" style="margin-top:10px">
+      <canvas id="patchB" width="1200" height="600"></canvas>
+      <div class="tag l" style="color:var(--accent)">New blending</div>
+    </div>
+    <div class="legend">
+      <div><b>Height blend:</b> each texture's bumps decide who wins at a border, so grass grows between paving stones first and sand fills the low spots.</div>
+      <div><b>Border width and noise:</b> how wide the mixing zone is, and how much it wanders instead of following the terrain grid.</div>
+      <div><b>Colour harmony:</b> evens out brightness and contrast between textures shot by different photographers.</div>
+      <div><b>Road and paving fringe:</b> worn earth around road and paving edges instead of a hard cut.</div>
+    </div>
+  </section>
+
+  <div class="note">What a flat mockup can't show: the game's sky light, fog, distance and the region and season colours that tint every texture. Once you've picked settings, one short test build confirms them in the world.</div>
+</main>
+</div>
+<div class="busy" id="busy">Processing…</div>
+
+<script>
+/*TEXDATA*/
+</script>
+<script>
+'use strict';
+const S = 512;
+// ---------------- parameters ----------------
+const TEXCTL = [
+  ['delight', 'Remove baked lighting', 0, 1, .05, 'Evens out the photo\'s own shadows and exposure'],
+  ['radius', 'Painterly smoothing', 0, 8, 1, 'Flattens noise inside each stone or plank, keeps edges'],
+  ['passes', 'Smoothing passes', 1, 2, 1, 'A second pass gives a softer, brush-like look'],
+  ['bands', 'Tone bands', 0, 10, 1, '0 = off. Fewer bands = flatter, more cartoon shading'],
+  ['calm', 'Ground calmness', 0, 1, .05, 'Ground only: melts grit into soft patches of colour'],
+  ['contrast', 'Detail contrast', .6, 1.3, .05, 'Lower = calmer surfaces'],
+  ['sat', 'Saturation', .7, 1.4, .02, 'Keep near 1: you found v22.0 oversaturated'],
+  ['edge', 'Edge highlights', 0, 1, .05, 'Painted light on raised edges'],
+  ['crev', 'Crevice shading', 0, 1, .05, 'Painted dark in cracks and joints'],
+  ['bump', 'Bump strength', 0, 1.5, .05, 'How strongly light picks up surface bumps'],
+  ['bsoft', 'Bump softness', 0, 6, 1, 'Blurs the bump map so only big shapes catch light'],
+];
+const BLENDCTL = [
+  ['hblend', 'Height blend', 0, 1.5, .05, 'Bumps decide the border'],
+  ['bwidth', 'Border width (m)', .1, 1.5, .05, 'Width of the mixing zone'],
+  ['bnoise', 'Border noise (m)', 0, 1.5, .05, 'How much borders wander'],
+  ['harmony', 'Colour harmony', 0, 1, .05, 'Match brightness and contrast between textures'],
+  ['fringe', 'Road and paving fringe', 0, 1, .05, 'Worn earth at hard edges'],
+];
+const PRESETS = {
+  'Photo (now)': { delight: 0, calm: 0,  radius: 0, passes: 1, bands: 0, contrast: 1, sat: 1, edge: 0, crev: 0, bump: 1, bsoft: 0, hblend: 0, bwidth: .1, bnoise: 0, harmony: 0, fringe: 0 },
+  'Light touch': { delight: .4, calm: .3,  radius: 2, passes: 1, bands: 0, contrast: .95, sat: 1.02, edge: .3, crev: .25, bump: .75, bsoft: 1, hblend: .6, bwidth: .5, bnoise: .5, harmony: .5, fringe: .5 },
+  'Balanced ★': { delight: .6, calm: .5,  radius: 4, passes: 1, bands: 6, contrast: .9, sat: 1.06, edge: .5, crev: .4, bump: .55, bsoft: 2, hblend: .9, bwidth: .7, bnoise: .7, harmony: .7, fringe: .7 },
+  'Strong cartoon': { delight: .8, calm: .7,  radius: 6, passes: 2, bands: 4, contrast: .82, sat: 1.12, edge: .75, crev: .55, bump: .35, bsoft: 3, hblend: 1.1, bwidth: .9, bnoise: .9, harmony: .9, fringe: .8 },
+};
+const P = Object.assign({}, PRESETS['Balanced ★']);
+
+// ---------------- image helpers ----------------
+function loadImg(src) { return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; }); }
+function imgData(img, w = S, h = S) { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d', { willReadFrequently: true }); g.imageSmoothingQuality = 'high'; g.drawImage(img, 0, 0, w, h); return g.getImageData(0, 0, w, h); }
+const lum = (r, g, b) => .2126 * r + .7152 * g + .0722 * b;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+// separable wrap-around box blur on an interleaved float buffer
+function blur(src, W, H, ch, r) {
+  if (r < 1) return src.slice();
+  const tmp = new Float32Array(src.length), out = new Float32Array(src.length), n = 2 * r + 1;
+  for (let y = 0; y < H; y++) for (let c = 0; c < ch; c++) {
+    let s = 0; for (let k = -r; k <= r; k++) s += src[(y * W + ((k % W) + W) % W) * ch + c];
+    for (let x = 0; x < W; x++) {
+      tmp[(y * W + x) * ch + c] = s / n;
+      s += src[(y * W + (x + r + 1) % W) * ch + c] - src[(y * W + ((x - r) % W + W) % W) * ch + c];
+    }
+  }
+  for (let x = 0; x < W; x++) for (let c = 0; c < ch; c++) {
+    let s = 0; for (let k = -r; k <= r; k++) s += tmp[((((k % H) + H) % H) * W + x) * ch + c];
+    for (let y = 0; y < H; y++) {
+      out[(y * W + x) * ch + c] = s / n;
+      s += tmp[(((y + r + 1) % H) * W + x) * ch + c] - tmp[((((y - r) % H) + H) % H * W + x) * ch + c];
+    }
+  }
+  return out;
+}
+
+// smooth (generalised) Kuwahara filter with summed-area tables, wrap-around
+let SAT = null;
+function kuwahara(col, W, r) {
+  if (r < 1) return col;
+  const p = r + 1, PW = W + 2 * p, N1 = PW + 1;
+  if (!SAT || SAT.n !== N1) SAT = { n: N1, a: [0, 1, 2, 3, 4].map(() => new Float64Array(N1 * N1)) };
+  const [sR, sG, sB, sL, sQ] = SAT.a;
+  for (let y = 0; y < PW; y++) {
+    let aR = 0, aG = 0, aB = 0, aL = 0, aQ = 0; const yy = ((y - p) % W + W) % W;
+    for (let x = 0; x < PW; x++) {
+      const xx = ((x - p) % W + W) % W, i = (yy * W + xx) * 3, R = col[i], G = col[i + 1], B = col[i + 2], L = lum(R, G, B);
+      aR += R; aG += G; aB += B; aL += L; aQ += L * L;
+      const o = (y + 1) * N1 + x + 1, u = y * N1 + x + 1;
+      sR[o] = sR[u] + aR; sG[o] = sG[u] + aG; sB[o] = sB[u] + aB; sL[o] = sL[u] + aL; sQ[o] = sQ[u] + aQ;
+    }
+  }
+  const out = new Float32Array(col.length), cnt = (r + 1) * (r + 1);
+  const Q = [[-r, 0, -r, 0], [0, r, -r, 0], [-r, 0, 0, r], [0, r, 0, r]];
+  for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) {
+    let wR = 0, wG = 0, wB = 0, wS = 0;
+    for (let q = 0; q < 4; q++) {
+      const x0 = x + p + Q[q][0], x1 = x + p + Q[q][1], y0 = y + p + Q[q][2], y1 = y + p + Q[q][3];
+      const A = y0 * N1 + x0, Bq = y0 * N1 + x1 + 1, C = (y1 + 1) * N1 + x0, D = (y1 + 1) * N1 + x1 + 1;
+      const mR = (sR[D] - sR[Bq] - sR[C] + sR[A]) / cnt, mG = (sG[D] - sG[Bq] - sG[C] + sG[A]) / cnt, mB = (sB[D] - sB[Bq] - sB[C] + sB[A]) / cnt;
+      const mL = (sL[D] - sL[Bq] - sL[C] + sL[A]) / cnt, v = Math.max(0, (sQ[D] - sQ[Bq] - sQ[C] + sQ[A]) / cnt - mL * mL);
+      const w = 1 / ((v + 2e-4) * (v + 2e-4));
+      wR += mR * w; wG += mG * w; wB += mB * w; wS += w;
+    }
+    const i = (y * W + x) * 3; out[i] = wR / wS; out[i + 1] = wG / wS; out[i + 2] = wB / wS;
+  }
+  return out;
+}
+
+// ---------------- per-texture processing ----------------
+const LIGHT = (() => { const v = [-.55, .55, .63]; const l = Math.hypot(...v); return v.map(a => a / l); })();
+function shadeLit(col, nrm, alpha, W, bgFn) {
+  const id = new ImageData(W, W), d = id.data, amb = .42, dif = .58, flat = amb + dif * LIGHT[2];
+  for (let i = 0, n = W * W; i < n; i++) {
+    const nx = nrm[i * 3], ny = nrm[i * 3 + 1], nz = nrm[i * 3 + 2];
+    const s = (amb + dif * Math.max(0, nx * LIGHT[0] + ny * LIGHT[1] + nz * LIGHT[2])) / flat;
+    let r = col[i * 3] * s, g = col[i * 3 + 1] * s, b = col[i * 3 + 2] * s;
+    if (alpha) { const a = alpha[i], bg = bgFn(i); r = r * a + bg[0] * (1 - a); g = g * a + bg[1] * (1 - a); b = b * a + bg[2] * (1 - a); }
+    d[i * 4] = clamp(r * 255, 0, 255); d[i * 4 + 1] = clamp(g * 255, 0, 255); d[i * 4 + 2] = clamp(b * 255, 0, 255); d[i * 4 + 3] = 255;
+  }
+  return id;
+}
+function skyBg(i) { const y = Math.floor(i / S) / S; return [.52 + .18 * y, .66 + .12 * y, .82 + .05 * y]; }
+
+function stylize(t) {
+  const n = S * S;
+  let col = t.col0.slice();
+  // 1. remove baked lighting: divide out the large-scale luminance
+  if (P.delight > 0) {
+    const L = new Float32Array(n); let mean = 0;
+    for (let i = 0; i < n; i++) { L[i] = lum(col[i * 3], col[i * 3 + 1], col[i * 3 + 2]); mean += L[i]; }
+    mean /= n;
+    const Lb = blur(blur(L, S, S, 1, 28), S, S, 1, 28);
+    for (let i = 0; i < n; i++) { const f = 1 + P.delight * (mean / Math.max(Lb[i], .02) - 1); col[i * 3] *= f; col[i * 3 + 1] *= f; col[i * 3 + 2] *= f; }
+  }
+  // 2. painterly smoothing
+  for (let k = 0; k < P.passes && P.radius > 0; k++) col = kuwahara(col, S, P.radius);
+  // 3. contrast and saturation
+  let mean = 0; const Ls = new Float32Array(n);
+  for (let i = 0; i < n; i++) { Ls[i] = lum(col[i * 3], col[i * 3 + 1], col[i * 3 + 2]); mean += Ls[i]; }
+  mean /= n;
+  const sorted = Float32Array.from(Ls).sort(), lo = sorted[Math.floor(n * .02)], hi = sorted[Math.floor(n * .98)];
+  for (let i = 0; i < n; i++) {
+    const L = Ls[i]; let L2 = mean + (L - mean) * P.contrast;
+    // 4. tone bands
+    if (P.bands >= 2) {
+      const ln = clamp((L2 - lo) / Math.max(hi - lo, .02), 0, 1) * P.bands, fl = Math.floor(ln), f = ln - fl;
+      const q = (Math.min(fl, P.bands - 1) + sstep(.5 - .3, .5 + .3, f)) / P.bands;
+      L2 = L2 + .7 * (lo + q * (hi - lo) - L2);
+    }
+    const k = L2 / Math.max(L, 1e-3);
+    for (let c = 0; c < 3; c++) { const v = col[i * 3 + c] * k; col[i * 3 + c] = L2 + (v - L2) * P.sat; }
+  }
+  // 5. painted edges and crevices from the height map's curvature
+  if (P.edge > 0 || P.crev > 0) {
+    const hs = blur(t.h, S, S, 1, Math.max(1, Math.round(P.radius / 2)));
+    const hb = blur(blur(hs, S, S, 1, 4), S, S, 1, 4);
+    let sd = 0; const lap = new Float32Array(n);
+    for (let i = 0; i < n; i++) { lap[i] = hs[i] - hb[i]; sd += lap[i] * lap[i]; }
+    sd = Math.sqrt(sd / n) || 1;
+    for (let i = 0; i < n; i++) {
+      const c = clamp(lap[i] / (1.6 * sd), -1, 1), up = Math.max(c, 0) * P.edge * .5, dn = Math.max(-c, 0) * P.crev * .65;
+      for (let ch = 0; ch < 3; ch++) { let v = col[i * 3 + ch]; v = v * (1 + .45 * up) + .02 * up; col[i * 3 + ch] = v * (1 - dn); }
+    }
+  }
+  // 5b. ground calmness: melt fine grit into soft patches of colour (last, so the bands don't outline the noise)
+  if (P.calm > 0 && t.group === 'ground') {
+    const bl = blur(blur(col, S, S, 3, 4), S, S, 3, 4);
+    for (let i = 0; i < n * 3; i++) col[i] += (bl[i] - col[i]) * P.calm;
+  }
+  // 6. bump: soften and weaken the normal map
+  const nr = blur(t.nrm0, S, S, 3, P.bsoft), nrm = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const x = nr[i * 3] * P.bump, y = nr[i * 3 + 1] * P.bump, z = Math.max(nr[i * 3 + 2], .2), l = Math.hypot(x, y, z);
+    nrm[i * 3] = x / l; nrm[i * 3 + 1] = y / l; nrm[i * 3 + 2] = z / l;
+  }
+  t.col1 = col; t.nrm1 = nrm;
+  t.lit1 = shadeLit(col, nrm, t.alpha, S, skyBg);
+}
+
+// ---------------- load ----------------
+const T = [];
+async function init() {
+  for (const r of TEX) {
+    const [ci, ni, hi] = await Promise.all([loadImg(r.col), loadImg(r.nrm), loadImg(r.h)]);
+    const cd = imgData(ci).data, nd = imgData(ni).data, hd = imgData(hi).data, n = S * S;
+    const col0 = new Float32Array(n * 3), nrm0 = new Float32Array(n * 3), h = new Float32Array(n);
+    const alpha = r.group === 'veg' ? new Float32Array(n) : null;
+    for (let i = 0; i < n; i++) {
+      for (let c = 0; c < 3; c++) col0[i * 3 + c] = cd[i * 4 + c] / 255;
+      let x = nd[i * 4] / 127.5 - 1, y = nd[i * 4 + 1] / 127.5 - 1, z = nd[i * 4 + 2] / 127.5 - 1; const l = Math.hypot(x, y, z) || 1;
+      nrm0[i * 3] = x / l; nrm0[i * 3 + 1] = y / l; nrm0[i * 3 + 2] = z / l;
+      h[i] = hd[i * 4] / 255;
+      if (alpha) alpha[i] = cd[i * 4 + 3] / 255;
+    }
+    // high-passed height for blending (0.5 = average)
+    const hb = blur(blur(h, S, S, 1, 40), S, S, 1, 40), hp = new Float32Array(n);
+    for (let i = 0; i < n; i++) hp[i] = clamp(.5 + (h[i] - hb[i]) * 1.6, 0, 1);
+    const t = Object.assign({}, r, { col0, nrm0, h, hp, alpha });
+    t.lit0 = shadeLit(col0, nrm0, alpha, S, skyBg);
+    T.push(t);
+  }
+  buildUI();
+  selectTex(0);
+  processAll();
+}
+
+// ---------------- UI ----------------
+let sel = 0, view = 'tiled', split = .5, psplit = .5, holdBefore = false;
+const $ = id => document.getElementById(id);
+function ctlRow(host, [k, label, mn, mx, st, help]) {
+  const d = document.createElement('div'); d.className = 'ctl';
+  d.innerHTML = `<label><span>${label}</span><span id="v_${k}"></span></label><input type="range" id="r_${k}" min="${mn}" max="${mx}" step="${st}"><small>${help}</small>`;
+  host.appendChild(d);
+  const inp = d.querySelector('input');
+  inp.addEventListener('input', () => { P[k] = +inp.value; markPreset(); syncVals(); schedule(BLENDCTL.some(b => b[0] === k) ? 'blend' : 'tex'); });
+}
+function syncVals() {
+  for (const [k, , , , st] of [...TEXCTL, ...BLENDCTL]) {
+    $('r_' + k).value = P[k];
+    $('v_' + k).textContent = k === 'bands' && P[k] < 2 ? 'off' : (st < 1 ? (+P[k]).toFixed(2) : P[k]);
+  }
+  $('out').value = JSON.stringify({ stylize: Object.fromEntries(TEXCTL.map(c => [c[0], P[c[0]]])), blend: Object.fromEntries(BLENDCTL.map(c => [c[0], P[c[0]]])) }, null, 1);
+}
+function markPreset() {
+  for (const b of $('presets').children) b.classList.toggle('on', Object.entries(PRESETS[b.textContent]).every(([k, v]) => P[k] === v));
+}
+function buildUI() {
+  for (const name of Object.keys(PRESETS)) {
+    const b = document.createElement('button'); b.textContent = name;
+    b.onclick = () => { Object.assign(P, PRESETS[name]); markPreset(); syncVals(); schedule('tex'); };
+    $('presets').appendChild(b);
+  }
+  TEXCTL.forEach(c => ctlRow($('ctlTex'), c)); BLENDCTL.forEach(c => ctlRow($('ctlBlend'), c));
+  syncVals(); markPreset();
+  T.forEach((t, i) => {
+    const d = document.createElement('div'); d.className = 'thumb';
+    d.innerHTML = `<canvas width="160" height="160"></canvas><div>${t.label}</div>`;
+    d.onclick = () => selectTex(i);
+    $('grid').appendChild(d); t.thumb = d;
+  });
+  $('vTiled').onclick = () => { view = 'tiled'; $('vTiled').classList.add('on'); $('vClose').classList.remove('on'); drawBig(); };
+  $('vClose').onclick = () => { view = 'close'; $('vClose').classList.add('on'); $('vTiled').classList.remove('on'); drawBig(); };
+  const hb = $('holdBefore');
+  const setHold = v => { holdBefore = v; T.forEach(drawThumb); };
+  hb.onpointerdown = () => setHold(true); hb.onpointerup = hb.onpointerleave = () => setHold(false);
+  dragSplit($('big'), v => { split = v; drawBig(); });
+  $('copy').onclick = () => { navigator.clipboard?.writeText($('out').value); $('copy').textContent = 'Copied'; setTimeout(() => $('copy').textContent = 'Copy settings', 1200); };
+}
+function dragSplit(cv, set) {
+  let down = false;
+  const go = e => { const r = cv.getBoundingClientRect(); set(clamp((e.clientX - r.left) / r.width, 0, 1)); };
+  cv.addEventListener('pointerdown', e => { down = true; cv.setPointerCapture(e.pointerId); go(e); });
+  cv.addEventListener('pointermove', e => { if (down) go(e); });
+  cv.addEventListener('pointerup', () => down = false);
+}
+function selectTex(i) { sel = i; T.forEach((t, j) => t.thumb.classList.toggle('sel', j === i)); $('selName').textContent = T[i].label; drawBig(); }
+
+const tileCanvas = id => { const c = document.createElement('canvas'); c.width = c.height = S; c.getContext('2d').putImageData(id, 0, 0); return c; };
+function drawThumb(t) {
+  const id = holdBefore || !t.lit1 ? t.lit0 : t.lit1, g = t.thumb.querySelector('canvas').getContext('2d');
+  g.imageSmoothingQuality = 'high'; g.drawImage(tileCanvas(id), 0, 0, 160, 160);
+}
+function drawBig() {
+  const t = T[sel], cv = $('big'), g = cv.getContext('2d'), W = cv.width;
+  const paint = (id) => {
+    const c = tileCanvas(id); g.imageSmoothingQuality = 'high';
+    if (t.group === 'veg') { g.drawImage(c, 0, 0, W, W); return; }
+    if (view === 'tiled') { const h = W / 2; for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) g.drawImage(c, x * h, y * h, h, h); }
+    else { for (let y = 0; y < W; y += S) for (let x = 0; x < W; x += S) g.drawImage(c, x - 64, y - 64); }
+  };
+  paint(t.lit0);
+  if (t.lit1) { g.save(); g.beginPath(); g.rect(split * W, 0, W, W); g.clip(); paint(t.lit1); g.restore(); }
+  g.fillStyle = '#e0a64a'; g.fillRect(split * W - 1.5, 0, 3, W);
+  g.beginPath(); g.arc(split * W, W / 2, 11, 0, 7); g.fill();
+  g.fillStyle = '#1b150c'; g.font = 'bold 13px sans-serif'; g.textAlign = 'center'; g.fillText('↔', split * W, W / 2 + 5);
+}
+
+// ---------------- scheduling ----------------
+let job = 0, pending = null;
+function schedule(kind) {
+  pending = pending === 'tex' ? 'tex' : kind;
+  clearTimeout(schedule.t); schedule.t = setTimeout(() => { const k = pending; pending = null; k === 'tex' ? processAll() : buildPatch(); }, 120);
+}
+async function processAll() {
+  const my = ++job; $('busy').classList.add('show');
+  const order = [sel, ...T.map((_, i) => i).filter(i => i !== sel)];
+  for (const i of order) {
+    await new Promise(r => setTimeout(r, 0)); if (my !== job) return;
+    stylize(T[i]); drawThumb(T[i]); if (i === sel) drawBig();
+  }
+  await buildPatch(my);
+  if (my === job) $('busy').classList.remove('show');
+}
+
+// ---------------- ground patch ----------------
+const PW = 1200, PH = 600, PPM = 80;                     // 15 x 7.5 m at 80 px per metre
+const LAY = ['meadow', 'steppe', 'sand', 'earth', 'rock', 'setts'];
+function hash(x, y) { let h = Math.imul(x, 374761393) + Math.imul(y, 668265263); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; }
+function vnoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+  const a = hash(xi, yi), b = hash(xi + 1, yi), c = hash(xi, yi + 1), d = hash(xi + 1, yi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+const fbm = (x, y) => (vnoise(x, y) * .55 + vnoise(x * 2.1 + 7, y * 2.1 + 3) * .3 + vnoise(x * 4.3 + 1, y * 4.3 + 9) * .15) * 2 - 1;
+// signed distances in metres (positive inside)
+function fields(x, y) {
+  const meadow = 5.6 - x - .6 * Math.sin(y * .9), sand = x - 10.6 + .5 * Math.sin(y * 1.3);
+  const rdx = (x - 8.0) / 1.25, rdy = (y - 1.7);
+  const rock = 1.45 - Math.hypot(rdx, rdy) * 1.0;
+  const cy = 4.2 + .65 * Math.sin(x * .45);
+  const road = x < 11.6 ? .8 - Math.abs(y - cy) : .8 - Math.hypot(x - 11.6, y - (4.2 + .65 * Math.sin(11.6 * .45)));
+  const square = Math.min(x - 10.9, y - 4.8);
+  return { meadow, sand, rock, road, square };
+}
+function layerWeights(f, sm, out) {
+  // sm(d) turns a signed distance into a 0..1 weight
+  const sq = sm(f.square), rd = sm(f.road), rk = sm(f.rock);
+  const m = sm(f.meadow), sa = sm(f.sand), st = Math.max(0, 1 - m - sa);
+  let rem = 1 - sq; const wE = rd * rem; rem *= 1 - rd; const wK = rk * rem; rem *= 1 - rk;
+  const bt = m + sa + st || 1;
+  out[0] = rem * m / bt; out[1] = rem * st / bt; out[2] = rem * sa / bt; out[3] = wE; out[4] = wK; out[5] = sq;
+}
+// patch tiles: resized lit colour, height, for both sides
+function makeTile(t, side) {
+  const T2 = Math.round(t.m * PPM), n = S * S;
+  const col = side ? t.col1 : t.col0, nrm = side ? t.nrm1 : t.nrm0;
+  const lit = shadeLit(col, nrm, null, S);
+  const c = document.createElement('canvas'); c.width = c.height = S; c.getContext('2d').putImageData(lit, 0, 0);
+  const cd = imgData(c, T2, T2).data;
+  const hcv = document.createElement('canvas'); hcv.width = hcv.height = S; const hid = new ImageData(S, S);
+  for (let i = 0; i < n; i++) { const v = t.hp[i] * 255; hid.data[i * 4] = hid.data[i * 4 + 1] = hid.data[i * 4 + 2] = v; hid.data[i * 4 + 3] = 255; }
+  hcv.getContext('2d').putImageData(hid, 0, 0);
+  const hd = imgData(hcv, T2, T2).data;
+  const rgb = new Float32Array(T2 * T2 * 3), h = new Float32Array(T2 * T2);
+  let mL = 0;
+  for (let i = 0; i < T2 * T2; i++) { for (let k = 0; k < 3; k++) rgb[i * 3 + k] = cd[i * 4 + k] / 255; h[i] = hd[i * 4] / 255; mL += lum(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]); }
+  mL /= T2 * T2; let sd = 0;
+  for (let i = 0; i < T2 * T2; i++) { const d = lum(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]) - mL; sd += d * d; }
+  return { T: T2, rgb, h, mL, sd: Math.sqrt(sd / (T2 * T2)) };
+}
+let patchOld = null, patchNew = null;
+async function buildPatch(my) {
+  const L = LAY.map(k => T.find(t => t.key === k));
+  const tilesOld = L.map(t => makeTile(t, 0)), tilesNew = L.map(t => makeTile(t, 1));
+  // colour harmony targets (new side only)
+  const tmL = tilesNew.reduce((a, t) => a + t.mL, 0) / tilesNew.length, tsd = tilesNew.reduce((a, t) => a + t.sd, 0) / tilesNew.length;
+  // gentler on brightness than contrast, so meadow stays darker than sand
+  const H = P.harmony;
+  for (const t of tilesNew) {
+    const tgtM = t.mL + (tmL - t.mL) * H * .45, ks = 1 + (tsd / Math.max(t.sd, 1e-3) - 1) * H;
+    for (let i = 0; i < t.T * t.T; i++) {
+      const Lp = lum(t.rgb[i * 3], t.rgb[i * 3 + 1], t.rgb[i * 3 + 2]), L2 = tgtM + (Lp - t.mL) * ks, k = L2 / Math.max(Lp, 1e-3);
+      for (let c = 0; c < 3; c++) t.rgb[i * 3 + c] *= k;
+    }
+  }
+  if (my !== undefined && my !== job) return;
+  // old side: base layers and rock crossfade along a 1.5 m terrain grid; road and paving are hard-edged meshes
+  const G = 1.5, gw = Math.ceil(15 / G) + 2, gh = Math.ceil(7.5 / G) + 2, grid = [];
+  const hard = d => d > 0 ? 1 : 0;
+  for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) { const w = new Float32Array(6); layerWeights(fields(i * G, j * G), hard, w); grid.push(w); }
+  const old = new ImageData(PW, PH), nw = new ImageData(PW, PH), w = new Float32Array(6), w2 = new Float32Array(6);
+  const bw = P.bwidth, na = P.bnoise;
+  for (let py = 0; py < PH; py++) {
+    if (py % 60 === 0) { await new Promise(r => setTimeout(r, 0)); if (my !== undefined && my !== job) return; }
+    for (let px = 0; px < PW; px++) {
+      const x = px / PPM, y = py / PPM, f = fields(x, y), o = (py * PW + px) * 4;
+      // ---- old
+      const gx = x / G, gy = y / G, i0 = Math.floor(gx), j0 = Math.floor(gy), fx = gx - i0, fy = gy - j0;
+      const a = grid[j0 * gw + i0], b = grid[j0 * gw + i0 + 1], c = grid[(j0 + 1) * gw + i0], d = grid[(j0 + 1) * gw + i0 + 1];
+      for (let k = 0; k < 6; k++) w[k] = (a[k] * (1 - fx) + b[k] * fx) * (1 - fy) + (c[k] * (1 - fx) + d[k] * fx) * fy;
+      const sq = clamp(f.square * PPM + .5, 0, 1), rd = clamp(f.road * PPM + .5, 0, 1) * (1 - sq);
+      const rest = (1 - sq) * (1 - rd), bsum = w[0] + w[1] + w[2] + w[4] || 1;
+      w[0] *= rest / bsum; w[1] *= rest / bsum; w[2] *= rest / bsum; w[4] *= rest / bsum; w[3] = rd; w[5] = sq;
+      put(old.data, o, tilesOld, w, px, py);
+      // ---- new: noisy, wider borders
+      const nz = na * (fbm(x * .9, y * .9) * .6 + fbm(x * .3 + 5, y * .3) * .9), nz2 = na * (fbm(x * .9 + 40, y * .9 + 17) * .6 + fbm(x * .3 + 21, y * .3 + 9) * .9), nzf = na * fbm(x * 1.4 + 3, y * 1.4 + 8);
+      const sm = dd => sstep(-bw, bw, dd);
+      const fn = { meadow: f.meadow + nz * 1.2, sand: f.sand + nz2 * 1.2, rock: f.rock + nzf * .5, road: f.road + nzf * .25, square: f.square + nzf * .3 };
+      layerWeights(fn, sm, w2);
+      // dirt fringe just outside the road and paving
+      if (P.fringe > 0) {
+        const ring = Math.max(sstep(-1.1, -.05, fn.square) - w2[5], 0) + .6 * Math.max(sstep(-.4, -.05, fn.road) - w2[3] - w2[5], 0);
+        const add = Math.min(ring, 1) * P.fringe * clamp(.55 + .6 * fbm(x * 2.2, y * 2.2), 0, 1);
+        if (add > 0) { const s = 1 - add; for (let k = 0; k < 6; k++) w2[k] *= s; w2[3] += add; }
+      }
+      // height-based blend
+      if (P.hblend > 0) {
+        let m = -1e9; const sc = w;  // reuse buffer
+        for (let k = 0; k < 6; k++) {
+          if (w2[k] < .002) { sc[k] = -1e9; continue; }
+          const t = tilesNew[k], hh = t.h[(py % t.T) * t.T + (px % t.T)];
+          sc[k] = w2[k] + P.hblend * (hh - .5); if (sc[k] > m) m = sc[k];
+        }
+        let tot = 0; const soft = .05 + .15 * P.bwidth;
+        for (let k = 0; k < 6; k++) { w2[k] = Math.max(sc[k] - (m - soft), 0); tot += w2[k]; }
+        for (let k = 0; k < 6; k++) w2[k] /= tot;
+      }
+      put(nw.data, o, tilesNew, w2, px, py);
+    }
+  }
+  patchOld = tileCanvasWH(old); patchNew = tileCanvasWH(nw); drawPatch();
+}
+function put(dst, o, tiles, w, px, py) {
+  let r = 0, g = 0, b = 0;
+  for (let k = 0; k < 6; k++) {
+    const wk = w[k]; if (wk < .002) continue;
+    const t = tiles[k], i = ((py % t.T) * t.T + (px % t.T)) * 3;
+    r += t.rgb[i] * wk; g += t.rgb[i + 1] * wk; b += t.rgb[i + 2] * wk;
+  }
+  dst[o] = r * 255; dst[o + 1] = g * 255; dst[o + 2] = b * 255; dst[o + 3] = 255;
+}
+function tileCanvasWH(id) { const c = document.createElement('canvas'); c.width = id.width; c.height = id.height; c.getContext('2d').putImageData(id, 0, 0); return c; }
+function drawPatch() {
+  if (!patchOld) return;
+  $('patchA').getContext('2d').drawImage(patchOld, 0, 0);
+  $('patchB').getContext('2d').drawImage(patchNew, 0, 0);
+}
+init();
+</script>
+</body>
+</html>

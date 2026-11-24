@@ -214,26 +214,43 @@
           float mk = smoothstep(0.3, 0.7, vn(wp * 0.045)) * 0.55;  // a second, larger and turned sample hides the tiling
           mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
           float nf = (1.0 - smoothstep(35.0, 150.0, dist)) * uSN;
-          vec3 acc = vec3(0.0), nOff = vec3(0.0); float tot = 0.0;
+          // v22.2d: borders wander (noise on the weights where layers mix), then each layer's height decides who wins
+          // (grass in the cracks of paving first, sand in the hollows); the normal map's blue channel is the height
+          float hbF = 1.0 - smoothstep(110.0, 240.0, dist);
+          float wsum = 0.0;
+          for (int i = 0; i < 10; i++) { if (ws[i] > 0.0 && ws[i] < 0.999) ws[i] *= 0.45 + 1.1 * vn(wp * 0.33 + float(i) * 17.31) * (0.7 + 0.6 * vn(wp * 1.1 + float(i) * 5.7)); wsum += ws[i]; }
+          for (int i = 0; i < 10; i++) ws[i] /= max(wsum, 1e-4);
+          vec3 cols[10]; vec3 nrms[10]; float sc[10]; float mx = -9.0;
           for (int i = 0; i < 9; i++) {
-            float w = ws[i]; if (w < 0.015) continue;
+            sc[i] = -9.0; if (ws[i] < 0.015) continue;
             int li = i < 5 ? i : i + 5;
             vec4 P = uGP[li]; vec2 uv = wp * P.x; vec2 dx = gdx * P.x, dy = gdy * P.x; float Li = float(li);
             vec3 t = textureGrad(tGround, vec3(uv, Li), dx, dy).rgb;
             vec3 t2 = textureGrad(tGround, vec3(rot * uv * 0.37 + 0.31, Li), rot * dx * 0.37, rot * dy * 0.37).rgb;
             t = mix(t, t2, mk);
-            acc += surfDet(c, t, uGM[li], P) * w; tot += w;
-            if (nf > 0.0) { vec3 nt = textureGrad(tGroundN, vec3(uv, Li), dx, dy).xyz * 2.0 - 1.0; nOff += vec3(nt.x, 0.0, -nt.y) * w; }
+            cols[i] = surfDet(c, t, uGM[li], P);
+            vec3 nt = textureGrad(tGroundN, vec3(uv, Li), dx, dy).xyz;
+            nrms[i] = vec3(nt.x * 2.0 - 1.0, 0.0, 1.0 - nt.y * 2.0);
+            sc[i] = ws[i] + 0.9 * hbF * (nt.z - 0.5); mx = max(mx, sc[i]);
           }
+          sc[9] = -9.0;
           if (ws[9] > 0.015) {
             vec4 P = uGP[5]; vec3 an = abs(vWNorm); float bx = an.x / max(an.x + an.z, 1e-3);
             vec3 ta = textureGrad(tGround, vec3(vWPos.zy * P.x, 5.0), rdxa * P.x, rdya * P.x).rgb;
             vec3 tb = textureGrad(tGround, vec3(vWPos.xy * P.x, 5.0), rdxb * P.x, rdyb * P.x).rgb;
-            acc += surfDet(c, mix(tb, ta, bx), uGM[5], P) * ws[9]; tot += ws[9];
-            if (nf > 0.0) { vec3 na = textureGrad(tGroundN, vec3(vWPos.zy * P.x, 5.0), rdxa * P.x, rdya * P.x).xyz * 2.0 - 1.0;
-              vec3 nb = textureGrad(tGroundN, vec3(vWPos.xy * P.x, 5.0), rdxb * P.x, rdyb * P.x).xyz * 2.0 - 1.0;
-              nOff += (vec3(0.0, -na.y, na.x) * bx + vec3(nb.x, -nb.y, 0.0) * (1.0 - bx)) * ws[9] * 1.6; }
+            cols[9] = surfDet(c, mix(tb, ta, bx), uGM[5], P);
+            vec3 na = textureGrad(tGroundN, vec3(vWPos.zy * P.x, 5.0), rdxa * P.x, rdya * P.x).xyz * 2.0 - 1.0;
+            vec3 nb = textureGrad(tGroundN, vec3(vWPos.xy * P.x, 5.0), rdxb * P.x, rdyb * P.x).xyz * 2.0 - 1.0;
+            nrms[9] = (vec3(0.0, -na.y, na.x) * bx + vec3(nb.x, -nb.y, 0.0) * (1.0 - bx)) * 1.6;
+            sc[9] = ws[9] + 0.9 * hbF * (mix(nb.z, na.z, bx) * 0.5); mx = max(mx, sc[9]);
           }
+          vec3 acc = vec3(0.0), nOff = vec3(0.0); float tot = 0.0;
+          for (int i = 0; i < 10; i++) {
+            if (sc[i] < -8.0) continue;
+            float w = mix(ws[i], max(sc[i] - (mx - 0.16), 0.0) / 0.16, hbF);
+            acc += cols[i] * w; tot += w; nOff += nrms[i] * w;
+          }
+          nOff /= max(tot, 1e-4); if (nf <= 0.0) nOff = vec3(0.0);
           c = mix(c, acc / max(tot, 1e-4), gtv);
           vec3 Nw = normalize(vWNorm); surfN = normalize(Nw + (nOff - Nw * dot(Nw, nOff)) * nf * 1.3);
         }
@@ -408,9 +425,23 @@
           float L = ptype < 0.5 ? 3.0 : 5.0 + ptype; int li = int(L); vec4 P = uGP[li]; vec2 uv = wp * P.x;
           vec3 t = textureGrad(tGround, vec3(uv, L), gdx * P.x, gdy * P.x).rgb;
           vec3 tc = surfDet(diffuseColor.rgb, t, uGM[li], P) * (1.0 - 0.22 * ruts * (1.0 - paved));
-          c = mix(c, tc, gtv);
           float nf = (1.0 - smoothstep(30.0, 130.0, length(vWPos2 - cameraPosition))) * uSN;
           vec3 nt = textureGrad(tGroundN, vec3(uv, L), gdx * P.x, gdy * P.x).xyz * 2.0 - 1.0;
+          // v22.2d: a ragged edge instead of a straight cut (noise, plus the paving's own height so whole stones stay),
+          // and worn earth creeping between the stones along paved edges
+          float au = abs(u), en = vn(wp * 1.3) * 0.6 + vn(wp * 5.0) * 0.4;
+          if (au + (en - 0.5) * 0.4 - paved * nt.z * 0.12 > 0.97) discard;
+          if (paved > 0.0) {
+            vec4 PE = uGP[3]; vec2 ue = wp * PE.x;
+            vec3 te = textureGrad(tGround, vec3(ue, 3.0), gdx * PE.x, gdy * PE.x).rgb;
+            float he = textureGrad(tGroundN, vec3(ue, 3.0), gdx * PE.x, gdy * PE.x).z;
+            float wE = smoothstep(0.55, 0.95, au + (en - 0.5) * 0.35);
+            float scE = wE + 0.9 * (he - 0.5), scP = (1.0 - wE) + 0.9 * nt.z * 0.5;
+            float e = smoothstep(-0.15, 0.15, scE - scP) * step(0.02, wE);
+            tc = mix(tc, surfDet(diffuseColor.rgb * vec3(1.02, 0.97, 0.9), te, uGM[3], PE), e);
+            nt.xy *= 1.0 - 0.6 * e;
+          }
+          c = mix(c, tc, gtv);
           surfN = vec3(nt.x, 0.0, -nt.y) * nf * (0.8 + 0.6 * paved);
         }
         c *= 1.0 - 0.14 * smoothstep(0.7, 1.0, abs(u));
