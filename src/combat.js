@@ -475,7 +475,7 @@
   }
   function frame(now) {
     if (!built) return; const dt = Math.min(.05, (now - lastT) / 1000 || .016); lastT = now;
-    tick(dt); renderer.setRenderTarget(null); renderer.render(scene, cam);
+    tick(dt); if (window.ATMOS) { ATMOS.soft[2] = 100; ATMOS.soft[3] = 150; ATMOS.cloud[3] = 0; } /* v22.4: this arena's shadow box, no cloud shadows */ renderer.setRenderTarget(null); renderer.render(scene, cam);
   }
   function tick(dt) {
     let g = 0;

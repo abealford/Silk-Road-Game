@@ -18,9 +18,9 @@
   const canvas = $('c');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   const QUALITY = {
-    low: { pr: .75, shadow: 0, view: 900, veg: .55, clutter: .3, msaa: 0, bloom: 0, shafts: 0, life: .45, grass: .35, wx: 1400, imp: .35, birds: 40, plights: 0, rocks: .5, clouds: 60, stars: 1200 },
-    medium: { pr: 1, shadow: 1024, view: 1100, veg: .8, clutter: .65, msaa: 2, bloom: 1, shafts: 0, life: .75, grass: .65, wx: 2800, imp: .7, birds: 80, plights: 4, rocks: .8, clouds: 100, stars: 2200 },
-    high: { pr: 1.5, shadow: 2048, view: 1300, veg: 1, clutter: 1, msaa: 4, bloom: 1, shafts: 1, life: 1, grass: 1, wx: 4500, imp: 1, birds: 130, plights: 4, rocks: 1, clouds: 140, stars: 3200 } };
+    low: { pr: .75, shadow: 0, view: 900, veg: .55, clutter: .3, msaa: 0, bloom: .5, shafts: 12, ssr: 12, life: .45, grass: .35, wx: 1400, imp: .35, birds: 40, plights: 0, rocks: .5, clouds: 60, stars: 1200 },
+    medium: { pr: 1, shadow: 1024, view: 1100, veg: .8, clutter: .65, msaa: 2, bloom: 1, shafts: 20, ssr: 20, life: .75, grass: .65, wx: 2800, imp: .7, birds: 80, plights: 4, rocks: .8, clouds: 100, stars: 2200 },
+    high: { pr: 1.5, shadow: 2048, view: 1300, veg: 1, clutter: 1, msaa: 4, bloom: 1, shafts: 28, ssr: 32, life: 1, grass: 1, wx: 4500, imp: 1, birds: 130, plights: 4, rocks: 1, clouds: 140, stars: 3200 } };
   let qName = 'high'; try { qName = localStorage.getItem('silkroad_quality') || 'high'; } catch (e) { } if (!QUALITY[qName]) qName = 'high';
   let Q = QUALITY[qName];
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.pr));
@@ -32,26 +32,79 @@
   // ---- post-processing: filmic tone mapping, grading, vignette (WebGL2 + MSAA) ----
   const POST = renderer.capabilities.isWebGL2;
   let rt = null; const postScene = new THREE.Scene(), postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  // v22.4 atmosphere: the scene's depth drives far-scenery blur, sun rays through real silhouettes, screen-space water reflections and a sky rim light
   const postMat = new THREE.ShaderMaterial({
-    uniforms: { tDiffuse: { value: null }, tBloomA: { value: null }, tBloomB: { value: null }, uBloom: { value: 0 }, uShaft: { value: 0 }, uSun: { value: new THREE.Vector3(0.5, 0.5, 0) }, uAspect: { value: 1 }, uExposure: { value: 0.92 }, uVal: { value: 1 }, uNight: { value: 0 }, uWarm: { value: new THREE.Vector3(1, 1, 1) } },
+    uniforms: { tDiffuse: { value: null }, tDepth: { value: null }, tBloomA: { value: null }, tBloomB: { value: null }, tSun: { value: null }, tFar: { value: null },
+      uBloom: { value: 0 }, uShaft: { value: 0 }, uSteps: { value: 0 }, uSun: { value: new THREE.Vector3(0.5, 0.5, 0) }, uShaftCol: { value: new THREE.Color(1, 0.86, 0.62) }, uAspect: { value: 1 },
+      uExposure: { value: 0.92 }, uVal: { value: 1 }, uNight: { value: 0 }, uWarm: { value: new THREE.Vector3(1, 1, 1) },
+      uProj: { value: new THREE.Matrix4() }, uInvProj: { value: new THREE.Matrix4() }, uCamW: { value: new THREE.Matrix4() }, uNF: { value: new THREE.Vector2(0.12, 3400) }, uTexel: { value: new THREE.Vector2() },
+      uTime: { value: 0 }, uSSR: { value: 0 }, uDof: { value: 0 }, uDofR: { value: new THREE.Vector2(450, 1250) }, uRim: { value: new THREE.Vector4(1, 0.9, 0.7, 0) },
+      uDbg: { value: 0 }, uGain: { value: new THREE.Vector3(1, 1, 1) }, uLift: { value: new THREE.Vector3(0, 0, 0) }, uSat: { value: 1 } },
     depthTest: false, depthWrite: false,
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
-    fragmentShader: `uniform sampler2D tDiffuse; uniform sampler2D tBloomA; uniform sampler2D tBloomB; uniform float uBloom; uniform float uShaft; uniform vec3 uSun; uniform float uAspect; uniform float uExposure; uniform float uNight; uniform float uVal; varying vec2 vUv;
+    fragmentShader: `uniform sampler2D tDiffuse; uniform sampler2D tDepth; uniform sampler2D tBloomA; uniform sampler2D tBloomB; uniform sampler2D tSun; uniform sampler2D tFar;
+      uniform float uBloom; uniform float uShaft; uniform int uSteps; uniform vec3 uSun; uniform vec3 uShaftCol; uniform float uAspect; uniform float uExposure; uniform float uNight; uniform float uVal;
+      uniform mat4 uProj; uniform mat4 uInvProj; uniform mat4 uCamW; uniform vec2 uNF; uniform vec2 uTexel; uniform float uTime; uniform int uSSR; uniform float uDof; uniform vec2 uDofR; uniform vec4 uRim;
+      uniform vec3 uGain; uniform vec3 uLift; uniform float uSat; uniform int uDbg; varying vec2 vUv;
       vec3 aces(vec3 x){ const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14; return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0); }
+      float linD(float d){ float z = d * 2.0 - 1.0; return 2.0 * uNF.x * uNF.y / (uNF.y + uNF.x - z * (uNF.y - uNF.x)); }
+      vec3 viewPos(vec2 uv, float d){ vec4 p = uInvProj * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); return p.xyz / p.w; }
+      vec2 toUV(vec3 p){ vec4 c = uProj * vec4(p, 1.0); return c.xy / c.w * 0.5 + 0.5; }
+      float skyAt(vec2 uv){ return step(2900.0, linD(texture2D(tDepth, uv).r)); }
       void main(){
-        vec3 col = texture2D(tDiffuse, vUv).rgb;
+        vec4 src = texture2D(tDiffuse, vUv); vec3 col = src.rgb;
+        float dRaw = texture2D(tDepth, vUv).r; float ld = linD(dRaw); float sky = step(2900.0, ld);
+        // water marks itself with alpha 0.1-0.4 (opaque materials write 1): reflect the shore, trees and buildings in screen space
+        if (uSSR > 0 && src.a < 0.45) {
+          float w = clamp((src.a - 0.1) / 0.3, 0.0, 1.0) * (1.0 - smoothstep(600.0, 1300.0, ld));
+          vec3 P = viewPos(vUv, dRaw); vec3 wp = (uCamW * vec4(P, 1.0)).xyz;
+          vec3 Nw = normalize(vec3(sin(wp.x * 0.9 + uTime * 1.3) * 0.5 + sin((wp.x + wp.z) * 0.37 + uTime) * 0.5, 45.0, sin(wp.z * 0.8 - uTime * 1.1) * 0.5 + sin((wp.x - wp.z) * 0.29 - uTime * 0.7) * 0.5));
+          vec3 N = normalize(transpose(mat3(uCamW)) * Nw); vec3 R = reflect(normalize(P), N);
+          float t = 0.35 + length(P) * 0.012; vec2 hit = vec2(0.0); float conf = 0.0; float dbgI = 0.0;
+          for (int i = 0; i < 40; i++) { if (i >= uSSR) break;
+            vec3 Q = P + R * t; vec2 uv = toUV(Q);
+            if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || -Q.z < uNF.x) break;
+            float sd = linD(texture2D(tDepth, uv).r);
+            if (-Q.z > sd + 0.05) {
+              if (-Q.z - sd < t * 0.4 + 1.5 && sd < 2900.0) {
+                float t0 = t / 1.3, t1 = t;
+                for (int j = 0; j < 5; j++) { float tm = (t0 + t1) * 0.5; vec3 Qm = P + R * tm; if (-Qm.z > linD(texture2D(tDepth, toUV(Qm)).r)) t1 = tm; else t0 = tm; }
+                hit = toUV(P + R * t1); vec2 e = smoothstep(0.0, 0.07, hit) * smoothstep(0.0, 0.07, 1.0 - hit);
+                conf = e.x * e.y * (1.0 - float(i) / float(uSSR) * 0.6);
+              }
+              break;
+            }
+            t *= 1.3;
+          }
+          if (conf > 0.0) col = mix(col, texture2D(tDiffuse, hit).rgb * vec3(0.86, 0.93, 0.95), w * conf * 0.9);
+          if (uDbg == 1) { gl_FragColor = vec4(w, conf, R.y, 1.0); return; }
+        }
+        // depth of field on far scenery only (tFar is premultiplied by farness, so near things never bleed into it)
+        if (uDof > 0.0) {
+          float fr = sky > 0.5 ? 0.35 : smoothstep(uDofR.x, uDofR.y, ld) * (1.0 - smoothstep(140.0, 260.0, (mat3(uCamW) * viewPos(vUv, dRaw)).y));
+          if (fr > 0.0) { vec4 fb = texture2D(tFar, vUv); col = mix(col, fb.rgb / max(fb.a, 1e-3), fr * uDof * clamp(fb.a * 2.0, 0.0, 1.0)); }
+        }
+        // a thin bright rim where near silhouettes meet the sky, strongest toward the sun
+        if (uRim.w > 0.0 && sky < 0.5 && ld < 650.0) {
+          vec2 toS = (uSun.xy - vUv) * vec2(uAspect, 1.0); vec2 dS = toS / max(length(toS), 1e-4) / vec2(uAspect, 1.0);
+          float e = max(max(skyAt(vUv + vec2(0.0, uTexel.y * 2.0)) * 0.55, skyAt(vUv + dS * uTexel * 2.5)), skyAt(vUv + dS * uTexel * 1.2));
+          col += uRim.rgb * e * uRim.w * (1.0 - smoothstep(250.0, 650.0, ld));
+        }
         if (uBloom > 0.0) col += (texture2D(tBloomA, vUv).rgb * 0.5 + texture2D(tBloomB, vUv).rgb * 0.8) * uBloom;
+        // sun rays: a radial blur of the sky around the sun, so trees, gates, walls and clouds cut them into shafts
         if (uShaft > 0.0 && uSun.z > 0.0) {
-          vec2 dlt = (vUv - uSun.xy) / 28.0; vec2 p = vUv - dlt * fract(sin(dot(vUv, vec2(12.9898, 78.233))) * 43758.5453); float dec = 1.0; vec3 acc = vec3(0.0);
-          for (int i = 0; i < 28; i++) { p -= dlt; acc += texture2D(tBloomA, clamp(p, 0.001, 0.999)).rgb * dec; dec *= 0.94; }
-          float fall = 1.0 - smoothstep(0.0, 0.85, length((vUv - uSun.xy) * vec2(uAspect, 1.0)));
-          col += acc / 28.0 * uShaft * uSun.z * fall * vec3(1.0, 0.86, 0.62);
+          float fs = float(uSteps); vec2 dlt = (vUv - uSun.xy) / fs; vec2 p = vUv - dlt * fract(sin(dot(vUv, vec2(12.9898, 78.233))) * 43758.5453); float dec = 1.0; vec3 acc = vec3(0.0);
+          for (int i = 0; i < 28; i++) { if (i >= uSteps) break; p -= dlt; acc += texture2D(tSun, clamp(p, 0.001, 0.999)).rgb * dec; dec *= 1.0 - 1.7 / fs; }
+          float fall = 1.0 - smoothstep(0.0, 0.9, length((vUv - uSun.xy) * vec2(uAspect, 1.0)));
+          col += acc / fs * uShaft * uSun.z * fall * uShaftCol;
         }
         col *= uExposure;
         col = mix(col, col * vec3(0.82, 0.94, 1.22), uNight * 0.55);
         col = aces(col);
+        // v22.4 colour grade: per region and time of day (gain, lift, saturation), applied gently
+        col = col * uGain + uLift * (1.0 - col);
         float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
-        col = mix(vec3(l), col, 1.08 - uVal * 0.14 * (1.0 - uNight) - uNight * 0.18);
+        col = mix(vec3(l), col, (1.08 - uVal * 0.14 * (1.0 - uNight) - uNight * 0.18) * uSat);
         col = mix(col, col * col * (3.0 - 2.0 * col), 0.3 + uVal * 0.12);
         col += uVal * (1.0 - uNight) * (vec3(0.02, 0.012, -0.01) * smoothstep(0.55, 1.0, l) + vec3(-0.015, 0.006, 0.018) * (1.0 - smoothstep(0.05, 0.4, l)));
         col += vec3(0.025, 0.012, -0.012) * smoothstep(0.45, 1.0, l) + vec3(-0.012, 0.004, 0.022) * (1.0 - smoothstep(0.0, 0.35, l));
@@ -63,7 +116,10 @@
   postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat));
   function makeRT() {
     if (!POST) return; const dpr = renderer.getPixelRatio(); const w = Math.floor(window.innerWidth * dpr), h = Math.floor(window.innerHeight * dpr);
-    if (rt) rt.dispose(); rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: Q.msaa }); postMat.uniforms.tDiffuse.value = rt.texture;
+    if (rt) { rt.depthTexture.dispose(); rt.dispose(); }
+    rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: Q.msaa });
+    rt.depthTexture = new THREE.DepthTexture(w, h); rt.depthTexture.type = THREE.UnsignedIntType;
+    postMat.uniforms.tDiffuse.value = rt.texture; postMat.uniforms.tDepth.value = rt.depthTexture; postMat.uniforms.uTexel.value.set(1 / w, 1 / h);
   }
   makeRT();
   const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.12, 3400);
@@ -101,26 +157,26 @@
 
   // regional palettes
   const PAL = [
-    { lon: 30, lat: 40, s: 7, zen: 0x5d93cc, hor: 0xf2dcb6, fog: 0xe6d6b8, sun: 0xffe3b5, hs: 0xbdd5e8, hg: 0x9c9384, far: 760 },
-    { lon: 47, lat: 35, s: 7, zen: 0x6a8fc4, hor: 0xf6d0a0, fog: 0xefcc9e, sun: 0xffdca8, hs: 0xc4d2e0, hg: 0x9c9384, far: 760 },
-    { lon: 65, lat: 39, s: 7, zen: 0x4f86c6, hor: 0xf2d9ae, fog: 0xead3aa, sun: 0xffe1b0, hs: 0xbad2e8, hg: 0x9c9384, far: 780 },
-    { lon: 88, lat: 41, s: 8, zen: 0x6c8bbb, hor: 0xf4c792, fog: 0xecc293, sun: 0xffd39c, hs: 0xc8cfd8, hg: 0x9c9384, far: 700 },
-    { lon: 110, lat: 34, s: 9, zen: 0x7ba4c6, hor: 0xe7e1c9, fog: 0xdcdac6, sun: 0xfff0d2, hs: 0xc5d8e0, hg: 0x9c9384, far: 600 },
-    { lon: 60, lat: 47, s: 7, zen: 0x5d95d1, hor: 0xeae6c3, fog: 0xe2e0c0, sun: 0xffeac0, hs: 0xc2d8ec, hg: 0x9c9384, far: 800 },
-    { lon: 32, lat: 27, s: 6, zen: 0x5a95d6, hor: 0xf7dcae, fog: 0xf0d8ae, sun: 0xffe6b8, hs: 0xc0d8ee, hg: 0xa49880, far: 820 },
-    { lon: 44, lat: 20, s: 7, zen: 0x5f90cc, hor: 0xf8d39e, fog: 0xf2cf9c, sun: 0xffdca4, hs: 0xc8d6e2, hg: 0xa49880, far: 800 },
-    { lon: 78, lat: 22, s: 8, zen: 0x6d95c0, hor: 0xf0d8b0, fog: 0xe6d4b2, sun: 0xffe2b0, hs: 0xc6d4dc, hg: 0x9a9480, far: 680 },
-    { lon: 100, lat: 16, s: 8, zen: 0x5d8fc2, hor: 0xe6e6cc, fog: 0xd8dcc4, sun: 0xfff0cc, hs: 0xc2d8e2, hg: 0x8f9a7e, far: 620 },
-    { lon: 88, lat: 31, s: 7, zen: 0x3a6dbf, hor: 0xd9e6ee, fog: 0xd2dde2, sun: 0xfff6e6, hs: 0xcfe0f2, hg: 0x9c9384, far: 950 },
-  ].map(p => ({ ...p, X: W.degX(p.lon), Y: W.degY(p.lat), c: ['zen', 'hor', 'fog', 'sun', 'hs', 'hg'].reduce((o, k) => (o[k] = new THREE.Color(p[k]), o), {}) }));
-  const palCur = { zen: new THREE.Color(), hor: new THREE.Color(), fog: new THREE.Color(), sun: new THREE.Color(), hs: new THREE.Color(), hg: new THREE.Color(), far: 760 };
+    { lon: 30, lat: 40, s: 7, zen: 0x5d93cc, hor: 0xf2dcb6, fog: 0xe6d6b8, sun: 0xffe3b5, hs: 0xbdd5e8, hg: 0x9c9384, far: 760, gr: [1.01, 1.0, 0.98], sat: 1.0 },
+    { lon: 47, lat: 35, s: 7, zen: 0x6a8fc4, hor: 0xf6d0a0, fog: 0xefcc9e, sun: 0xffdca8, hs: 0xc4d2e0, hg: 0x9c9384, far: 760, gr: [1.04, 1.0, 0.93], sat: 0.96 },
+    { lon: 65, lat: 39, s: 7, zen: 0x4f86c6, hor: 0xf2d9ae, fog: 0xead3aa, sun: 0xffe1b0, hs: 0xbad2e8, hg: 0x9c9384, far: 780, gr: [1.02, 1.0, 0.95], sat: 0.98 },
+    { lon: 88, lat: 41, s: 8, zen: 0x6c8bbb, hor: 0xf4c792, fog: 0xecc293, sun: 0xffd39c, hs: 0xc8cfd8, hg: 0x9c9384, far: 700, gr: [1.05, 0.99, 0.9], sat: 0.93 },
+    { lon: 110, lat: 34, s: 9, zen: 0x7ba4c6, hor: 0xe7e1c9, fog: 0xdcdac6, sun: 0xfff0d2, hs: 0xc5d8e0, hg: 0x9c9384, far: 600, gr: [0.98, 1.0, 1.02], sat: 0.95 },
+    { lon: 60, lat: 47, s: 7, zen: 0x5d95d1, hor: 0xeae6c3, fog: 0xe2e0c0, sun: 0xffeac0, hs: 0xc2d8ec, hg: 0x9c9384, far: 800, gr: [0.99, 1.01, 0.98], sat: 1.03 },
+    { lon: 32, lat: 27, s: 6, zen: 0x5a95d6, hor: 0xf7dcae, fog: 0xf0d8ae, sun: 0xffe6b8, hs: 0xc0d8ee, hg: 0xa49880, far: 820, gr: [1.04, 1.0, 0.92], sat: 0.97 },
+    { lon: 44, lat: 20, s: 7, zen: 0x5f90cc, hor: 0xf8d39e, fog: 0xf2cf9c, sun: 0xffdca4, hs: 0xc8d6e2, hg: 0xa49880, far: 800, gr: [1.06, 0.99, 0.9], sat: 0.95 },
+    { lon: 78, lat: 22, s: 8, zen: 0x6d95c0, hor: 0xf0d8b0, fog: 0xe6d4b2, sun: 0xffe2b0, hs: 0xc6d4dc, hg: 0x9a9480, far: 680, gr: [1.03, 1.0, 0.95], sat: 1.04 },
+    { lon: 100, lat: 16, s: 8, zen: 0x5d8fc2, hor: 0xe6e6cc, fog: 0xd8dcc4, sun: 0xfff0cc, hs: 0xc2d8e2, hg: 0x8f9a7e, far: 620, gr: [0.99, 1.02, 0.97], sat: 1.05 },
+    { lon: 88, lat: 31, s: 7, zen: 0x3a6dbf, hor: 0xd9e6ee, fog: 0xd2dde2, sun: 0xfff6e6, hs: 0xcfe0f2, hg: 0x9c9384, far: 950, gr: [0.97, 1.0, 1.04], sat: 1.02 },
+  ].map(p => ({ ...p, X: W.degX(p.lon), Y: W.degY(p.lat), c: ['zen', 'hor', 'fog', 'sun', 'hs', 'hg', 'gr'].reduce((o, k) => (o[k] = k === 'gr' ? new THREE.Color(p.gr[0], p.gr[1], p.gr[2]) : new THREE.Color(p[k]), o), {}) }));
+  const palCur = { zen: new THREE.Color(), hor: new THREE.Color(), fog: new THREE.Color(), sun: new THREE.Color(), hs: new THREE.Color(), hg: new THREE.Color(), gr: new THREE.Color(1, 1, 1), far: 760, sat: 1 };
   let palInit = false;
   function updatePalette(x, z, dt) {
-    const X = x / W.K, Y = -z / W.K; let tot = 0; const acc = { zen: [0, 0, 0], hor: [0, 0, 0], fog: [0, 0, 0], sun: [0, 0, 0], hs: [0, 0, 0], hg: [0, 0, 0] }; let far = 0;
-    for (const p of PAL) { const d2 = ((X - p.X) ** 2 + (Y - p.Y) ** 2) / (p.s * p.s); const w = Math.exp(-d2 * 2); tot += w; far += p.far * w; for (const k in acc) { acc[k][0] += p.c[k].r * w; acc[k][1] += p.c[k].g * w; acc[k][2] += p.c[k].b * w; } }
+    const X = x / W.K, Y = -z / W.K; let tot = 0; const acc = { zen: [0, 0, 0], hor: [0, 0, 0], fog: [0, 0, 0], sun: [0, 0, 0], hs: [0, 0, 0], hg: [0, 0, 0], gr: [0, 0, 0] }; let far = 0, sat = 0;
+    for (const p of PAL) { const d2 = ((X - p.X) ** 2 + (Y - p.Y) ** 2) / (p.s * p.s); const w = Math.exp(-d2 * 2); tot += w; far += p.far * w; sat += p.sat * w; for (const k in acc) { acc[k][0] += p.c[k].r * w; acc[k][1] += p.c[k].g * w; acc[k][2] += p.c[k].b * w; } }
     const k = palInit ? 1 - Math.exp(-dt * 0.8) : 1; palInit = true;
     for (const key in acc) { const t = new THREE.Color(acc[key][0] / tot, acc[key][1] / tot, acc[key][2] / tot); palCur[key].lerp(t, k); }
-    palCur.far = lerp(palCur.far, far / tot, k);
+    palCur.far = lerp(palCur.far, far / tot, k); palCur.sat = lerp(palCur.sat, sat / tot, k);
   }
 
   // ---------- materials ----------
@@ -463,6 +519,7 @@
          vWP = (modelMatrix * vec4(transformed, 1.0)).xyz;` + (kind === 'river' ? '\n vRiv = aRiv;' : ''));
       sh.fragmentShader = 'uniform float time; varying vec3 vWP; uniform vec3 uZen; uniform vec3 uHor; uniform vec3 uSunW; uniform vec3 uSunC; uniform sampler2D uSeaTex; uniform vec4 uSeaG;' + (kind === 'river' ? ' varying vec3 vRiv;' : '') + '\n' + GLSL_NOISE +
         sh.fragmentShader.replace('#include <opaque_fragment>', `
+        float atmRefl = 0.0;
         {
           vec3 Vd = normalize(cameraPosition - vWP); float dist = length(cameraPosition - vWP); vec2 q = vWP.xz;
           ${kind === 'river' ? `vec2 fl = vec2(vRiv.x * 3.0, vRiv.y * 0.22 - time * 0.55);
@@ -473,7 +530,8 @@
           vec3 Rr = reflect(-Vd, Nw); float ty = pow(clamp(Rr.y, 0.0, 1.0), 0.55); vec3 skyR = mix(uHor, uZen, ty);
           vec3 irr = (reflectedLight.directDiffuse + reflectedLight.indirectDiffuse) / max(diffuseColor.rgb, vec3(0.04));
           float refl = ${kind === 'lake' ? '0.85' : kind === 'river' ? '0.6' : '0.7'};
-          outgoingLight = mix(outgoingLight, skyR * ${kind === 'lake' ? '0.95' : '0.85'}, clamp(fres * refl + ${kind === 'lake' ? '0.18' : '0.08'}, 0.0, ${kind === 'lake' ? '0.8' : kind === 'river' ? '0.45' : '0.6'}));
+          atmRefl = clamp(fres * refl + ${kind === 'lake' ? '0.18' : '0.08'}, 0.0, ${kind === 'lake' ? '0.8' : kind === 'river' ? '0.45' : '0.6'});
+          outgoingLight = mix(outgoingLight, skyR * ${kind === 'lake' ? '0.95' : '0.85'}, atmRefl);
           outgoingLight += uSunC * pow(max(dot(Rr, uSunW), 0.0), ${kind === 'lake' ? '600.0' : '260.0'}) * ${kind === 'lake' ? '4.0' : '2.2'};
           ${kind === 'river' ? `float bank = smoothstep(0.62, 0.98, abs(vRiv.x));
           float fn = vn(vec2(vRiv.x * 6.0, vRiv.y * 0.6 - time * 1.4)) * 0.6 + vn(vec2(vRiv.x * 15.0, vRiv.y * 1.7 - time * 2.2)) * 0.4;
@@ -485,9 +543,12 @@
           outgoingLight = mix(outgoingLight, irr * vec3(0.28, 0.62, 0.6), shore * 0.45);
           float wv = sin(sg * 46.0 - time * 1.3 + vn(q * 0.04) * 8.0);
           float sfoam = smoothstep(0.82, 1.0, wv) * shore * (0.6 + 0.4 * vn(q * 0.5 + time * 0.2)) + (1.0 - smoothstep(0.42, 0.56, sg)) * (0.55 + 0.45 * vn(q * 0.8 - time * 0.3));
-          outgoingLight = mix(outgoingLight, irr * vec3(0.9, 0.93, 0.95), clamp(sfoam, 0.0, 1.0) * 0.8 * (1.0 - smoothstep(150.0, 700.0, dist)));` : ''}
+          outgoingLight = mix(outgoingLight, irr * vec3(0.9, 0.93, 0.95), clamp(sfoam, 0.0, 1.0) * 0.8 * (1.0 - smoothstep(150.0, 700.0, dist)));
+          atmRefl *= 1.0 - clamp(sfoam, 0.0, 1.0) * 0.8;` : ''}${kind === 'river' ? `
+          atmRefl *= 1.0 - clamp(foam * 0.8 + streak, 0.0, 1.0);` : ''}
         }
-        #include <opaque_fragment>`);
+        #include <opaque_fragment>
+        gl_FragColor.a = 0.1 + 0.3 * atmRefl; // v22.4: tells the post pass where (and how much) to add screen-space reflections`);
       withHaze(sh, 'vWP');
     };
     m.customProgramCacheKey = () => 'water' + kind;
@@ -2338,17 +2399,44 @@
   const moon = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), moonMat); moon.renderOrder = 0; moon.frustumCulled = false; scene.add(moon);
 
   // ---- painted clouds (toon-banded, Firewatch style) ----
+  // v22.4: puffier shapes (object-space bumps, flat bases kept), soft painterly bands, a darker base, sky-tinted edges and a silver lining toward the sun
   GFX.cloudMat = new THREE.ShaderMaterial({ fog: false,
-    uniforms: { uL: { value: SUN_DIR.clone() }, uLit: { value: new THREE.Color(1, 1, 1) }, uMid: { value: new THREE.Color(.9, .88, .86) }, uShade: { value: new THREE.Color(.6, .65, .75) }, uRim: { value: new THREE.Color(1, .9, .7) }, uFar: { value: new THREE.Color(.9, .85, .8) } },
-    vertexShader: 'varying vec3 vN; varying vec3 vW; void main(){ vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
-    fragmentShader: `uniform vec3 uL; uniform vec3 uLit; uniform vec3 uMid; uniform vec3 uShade; uniform vec3 uRim; uniform vec3 uFar; varying vec3 vN; varying vec3 vW;
+    uniforms: { uL: { value: SUN_DIR.clone() }, uLit: { value: new THREE.Color(1, 1, 1) }, uMid: { value: new THREE.Color(.9, .88, .86) }, uShade: { value: new THREE.Color(.6, .65, .75) }, uRim: { value: new THREE.Color(1, .9, .7) }, uFar: { value: new THREE.Color(.9, .85, .8) }, uEdge: { value: new THREE.Color(.75, .82, .9) } },
+    vertexShader: `varying vec3 vN; varying vec3 vW; varying float vY;
+      void main(){ vec3 p = position;
+        float d = (sin(p.x * 0.35 + p.z * 0.21) * sin(p.y * 0.52 + p.x * 0.17) + sin(p.z * 0.47 - p.y * 0.31) * 0.55 + sin((p.x - p.z) * 0.9) * 0.25) * 1.7;
+        p += normal * d * smoothstep(-1.0, 3.0, p.y); vY = p.y;
+        vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(p, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform vec3 uL; uniform vec3 uLit; uniform vec3 uMid; uniform vec3 uShade; uniform vec3 uRim; uniform vec3 uFar; uniform vec3 uEdge; varying vec3 vN; varying vec3 vW; varying float vY;
       void main(){ vec3 N = normalize(vN); float l = dot(N, uL) * 0.5 + 0.5; l += (vW.y - 700.0) * 0.0006;
-        vec3 c = mix(uShade, uMid, smoothstep(0.36, 0.42, l)); c = mix(c, uLit, smoothstep(0.66, 0.72, l));
-        vec3 V = normalize(cameraPosition - vW); float rim = pow(1.0 - abs(dot(N, V)), 4.0) * (0.4 + 0.6 * max(dot(-V, uL), 0.0)); c += uRim * rim * 0.55;
+        vec3 c = mix(uShade, uMid, smoothstep(0.3, 0.48, l)); c = mix(c, uLit, smoothstep(0.6, 0.78, l));
+        c *= mix(0.84, 1.0, smoothstep(-1.0, 7.0, vY));
+        vec3 V = normalize(cameraPosition - vW); float fr = pow(1.0 - abs(dot(N, V)), 2.2);
+        c = mix(c, uEdge, fr * 0.25);
+        float fw = pow(max(dot(-V, uL), 0.0), 7.0);
+        float rim = pow(1.0 - abs(dot(N, V)), 4.0) * (0.4 + 0.6 * max(dot(-V, uL), 0.0)); c += uRim * (rim * 0.55 + fw * fr * 0.7 + fw * 0.12);
         float d = length(vW.xz - cameraPosition.xz); c = mix(c, uFar, smoothstep(700.0, 2500.0, d) * 0.8);
         gl_FragColor = vec4(c, 1.0);
         #include <colorspace_fragment>
       }` });
+  // v22.4: a high layer of wispy cirrus, streaked along the wind, lit by the sun and the sunset
+  GFX.cirrusMat = new THREE.ShaderMaterial({ fog: false, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: { uDrift: { value: 0 }, uCov: { value: 0.5 }, uA: { value: 0.7 }, uLit: { value: new THREE.Color(1, 1, 1) }, uShade: { value: new THREE.Color(.8, .85, .9) }, uL: { value: SUN_DIR.clone() } },
+    vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: GLSL_NOISE + `uniform float uDrift; uniform float uCov; uniform float uA; uniform vec3 uLit; uniform vec3 uShade; uniform vec3 uL; varying vec3 vW;
+      void main(){ vec3 V = normalize(vW - cameraPosition); if (V.y <= 0.0) discard;
+        vec2 q = vW.xz * vec2(0.0011, 0.0042) + vec2(uDrift, 0.0);
+        float n = vn(q) * 0.55 + vn(q * 2.3 + 3.1) * 0.27 + vn(q * 5.7 - 1.7) * 0.13 + vn(q * 13.0) * 0.05;
+        float m = vn(vW.xz * 0.00045 + vec2(uDrift * 0.4, 7.0));
+        float a = smoothstep(0.62 - uCov * 0.22, 0.95, n) * smoothstep(0.25, 0.7, m);
+        a *= smoothstep(0.02, 0.2, V.y) * (1.0 - smoothstep(2000.0, 2600.0, length(vW.xz - cameraPosition.xz))) * uA;
+        if (a < 0.004) discard;
+        float sunF = pow(max(dot(V, uL), 0.0), 6.0);
+        vec3 c = mix(uShade, uLit, 0.55 + 0.45 * n) + uLit * sunF * 0.6;
+        gl_FragColor = vec4(c, a);
+        #include <colorspace_fragment>
+      }` });
+  { const ci = new THREE.Mesh(new THREE.PlaneGeometry(5600, 5600).rotateX(Math.PI / 2), GFX.cirrusMat); ci.frustumCulled = false; ci.renderOrder = -0.5; scene.add(ci); GFX.cirrus = ci; }
 
   // ---- weather ----
   const WX = {
@@ -2418,19 +2506,32 @@
         float l = max(c.r, max(c.g, c.b)); float k = max(l - uThr, 0.0); k = k * k / (k + 0.6); gl_FragColor = vec4(min(c / max(l, 1e-4) * k, vec3(6.0)), 1.0); }` });
   const blurMat = new THREE.ShaderMaterial({ depthTest: false, depthWrite: false, uniforms: { tSrc: { value: null }, uDir: { value: new THREE.Vector2() } }, vertexShader: VQ,
     fragmentShader: `uniform sampler2D tSrc; uniform vec2 uDir; varying vec2 vUv;
-      void main(){ vec3 c = texture2D(tSrc, vUv).rgb * 0.227; c += (texture2D(tSrc, vUv + uDir * 1.385).rgb + texture2D(tSrc, vUv - uDir * 1.385).rgb) * 0.316; c += (texture2D(tSrc, vUv + uDir * 3.23).rgb + texture2D(tSrc, vUv - uDir * 3.23).rgb) * 0.07; gl_FragColor = vec4(c, 1.0); }` });
+      void main(){ vec4 c = texture2D(tSrc, vUv) * 0.227; c += (texture2D(tSrc, vUv + uDir * 1.385) + texture2D(tSrc, vUv - uDir * 1.385)) * 0.316; c += (texture2D(tSrc, vUv + uDir * 3.23) + texture2D(tSrc, vUv - uDir * 3.23)) * 0.07; gl_FragColor = c; }` });
   const copyMat = new THREE.ShaderMaterial({ depthTest: false, depthWrite: false, uniforms: { tSrc: { value: null }, uTex: { value: new THREE.Vector2() } }, vertexShader: VQ,
     fragmentShader: `uniform sampler2D tSrc; uniform vec2 uTex; varying vec2 vUv; void main(){ gl_FragColor = vec4((texture2D(tSrc, vUv + uTex * vec2(-1.0,-1.0)).rgb + texture2D(tSrc, vUv + uTex * vec2(1.0,-1.0)).rgb + texture2D(tSrc, vUv + uTex * vec2(-1.0,1.0)).rgb + texture2D(tSrc, vUv + uTex * vec2(1.0,1.0)).rgb) * 0.25, 1.0); }` });
+  // v22.4: the sky around the sun (for rays) and the far scenery premultiplied by farness (for depth of field), both at low resolution
+  const DEPTH_GLSL = `uniform sampler2D tDepth; uniform vec2 uNF; float linD(float d){ float z = d * 2.0 - 1.0; return 2.0 * uNF.x * uNF.y / (uNF.y + uNF.x - z * (uNF.y - uNF.x)); }`;
+  const sunMaskMat = new THREE.ShaderMaterial({ depthTest: false, depthWrite: false, uniforms: { tSrc: { value: null }, tDepth: { value: null }, uNF: postMat.uniforms.uNF, uSun: postMat.uniforms.uSun, uAspect: postMat.uniforms.uAspect }, vertexShader: VQ,
+    fragmentShader: DEPTH_GLSL + `uniform sampler2D tSrc; uniform vec3 uSun; uniform float uAspect; varying vec2 vUv;
+      void main(){ float sky = step(2900.0, linD(texture2D(tDepth, vUv).r)); float r = length((vUv - uSun.xy) * vec2(uAspect, 1.0));
+        vec3 c = min(texture2D(tSrc, vUv).rgb, vec3(3.0)); float l = dot(c, vec3(0.3, 0.5, 0.2));
+        gl_FragColor = vec4(c * sky * (0.12 + exp(-r * 5.5) * 0.9) * smoothstep(0.35, 1.1, l), 1.0); }` });
+  const farMat = new THREE.ShaderMaterial({ depthTest: false, depthWrite: false, uniforms: { tSrc: { value: null }, tDepth: { value: null }, uNF: postMat.uniforms.uNF, uDofR: postMat.uniforms.uDofR, uInvProj: postMat.uniforms.uInvProj, uCamW: postMat.uniforms.uCamW, uTex: { value: new THREE.Vector2() } }, vertexShader: VQ,
+    fragmentShader: DEPTH_GLSL + `uniform sampler2D tSrc; uniform vec2 uDofR; uniform vec2 uTex; uniform mat4 uInvProj; uniform mat4 uCamW; varying vec2 vUv;
+      vec4 tap(vec2 o){ vec2 uv = vUv + uTex * o; float d = texture2D(tDepth, uv).r; float ld = linD(d);
+        vec4 p = uInvProj * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); float hy = (mat3(uCamW) * (p.xyz / p.w)).y;
+        float f = ld > 2900.0 ? 0.35 : smoothstep(uDofR.x * 0.8, uDofR.y, ld) * (1.0 - smoothstep(140.0, 260.0, hy)); return vec4(min(texture2D(tSrc, uv).rgb, vec3(8.0)) * f, f); }
+      void main(){ gl_FragColor = (tap(vec2(-1.0, -1.0)) + tap(vec2(1.0, -1.0)) + tap(vec2(-1.0, 1.0)) + tap(vec2(1.0, 1.0))) * 0.25; }` });
   function ensureBloom() {
-    const w = rt.width, h = rt.height; if (bl && bl.w === w && bl.h === h) return;
+    const w = rt.width, h = rt.height, sh = Q.bloom < 1 ? 3 : 2; if (bl && bl.w === w && bl.h === h && bl.sh === sh) return;
     if (bl) for (const t of bl.t) t.dispose();
     const mk = (d) => new THREE.WebGLRenderTarget(Math.max(1, w >> d), Math.max(1, h >> d), { type: THREE.HalfFloatType, depthBuffer: false });
-    bl = { w, h, t: [mk(2), mk(2), mk(3), mk(3)] };
+    bl = { w, h, sh, t: [mk(sh), mk(sh), mk(sh + 1), mk(sh + 1), mk(sh), mk(sh), mk(sh)] };
   }
   function pass(mat, target) { blQuad.material = mat; renderer.setRenderTarget(target); renderer.render(blScene, postCam); }
   function bloomPasses() {
-    ensureBloom(); const [A, B2, C2, D] = bl.t;
-    brightMat.uniforms.tSrc.value = rt.texture; brightMat.uniforms.uTex.value.set(1 / rt.width, 1 / rt.height); pass(brightMat, A);
+    const [A, B2, C2, D] = bl.t;
+    brightMat.uniforms.tSrc.value = rt.texture; brightMat.uniforms.uTex.value.set(1 / rt.width, 1 / rt.height); brightMat.uniforms.uThr.value = 1.2 - 0.25 * DN.night; pass(brightMat, A);
     blurMat.uniforms.tSrc.value = A.texture; blurMat.uniforms.uDir.value.set(1 / A.width, 0); pass(blurMat, B2);
     blurMat.uniforms.tSrc.value = B2.texture; blurMat.uniforms.uDir.value.set(0, 1 / A.height); pass(blurMat, A);
     copyMat.uniforms.tSrc.value = A.texture; copyMat.uniforms.uTex.value.set(0.5 / A.width, 0.5 / A.height); pass(copyMat, C2);
@@ -2438,17 +2539,36 @@
     blurMat.uniforms.tSrc.value = D.texture; blurMat.uniforms.uDir.value.set(0, 1.5 / C2.height); pass(blurMat, C2);
     postMat.uniforms.tBloomA.value = A.texture; postMat.uniforms.tBloomB.value = C2.texture;
   }
+  function farPasses() {
+    const F = bl.t[4], G = bl.t[5];
+    farMat.uniforms.tSrc.value = rt.texture; farMat.uniforms.tDepth.value = rt.depthTexture; farMat.uniforms.uTex.value.set(1 / rt.width, 1 / rt.height); pass(farMat, F);
+    for (const k of [0.8, 1.4]) {
+      blurMat.uniforms.tSrc.value = F.texture; blurMat.uniforms.uDir.value.set(k / F.width, 0); pass(blurMat, G);
+      blurMat.uniforms.tSrc.value = G.texture; blurMat.uniforms.uDir.value.set(0, k / F.height); pass(blurMat, F);
+    }
+    postMat.uniforms.tFar.value = F.texture;
+  }
+  // the knobs of the atmosphere pass (admin / tuning): set ATM.x = 0 to switch a part off
+  GFX.post = postMat.uniforms; const ATM = GFX.atm = { bloom: 1, rays: 1, dof: 1, ssr: 1, rim: 1, grade: 1, clouds: 1, cirrus: 1, soft: 1 };
   const sunScr = new THREE.Vector3();
   GFX.render = () => {
     if (POST && rt) {
       renderer.setRenderTarget(rt); renderer.render(scene, camera);
-      const pu = postMat.uniforms;
-      if (Q.bloom) { bloomPasses(); pu.uBloom.value = 0.55 + DN.night * 0.35; } else pu.uBloom.value = 0;
-      if (Q.shafts && Q.bloom && DN.day > 0.05) {
-        sunScr.copy(DN.sun).multiplyScalar(1000).add(camera.position).project(camera); camera.getWorldDirection(tV);
-        const facing = smoothJ(0.25, 0.7, tV.dot(DN.sun)); const ov = 1 - (WX[wxState.type].over || 0) * wxState.k;
-        pu.uSun.value.set(sunScr.x * 0.5 + 0.5, sunScr.y * 0.5 + 0.5, sunScr.z < 1 ? facing * DN.day * ov : 0); pu.uShaft.value = 0.55; pu.uAspect.value = camera.aspect;
+      const pu = postMat.uniforms; ensureBloom();
+      pu.uProj.value.copy(camera.projectionMatrix); pu.uInvProj.value.copy(camera.projectionMatrixInverse); pu.uCamW.value.copy(camera.matrixWorld);
+      pu.uNF.value.set(camera.near, camera.far); pu.uAspect.value = camera.aspect; pu.uTime.value = performance.now() / 1000 % 1000;
+      // sun on screen (also drives the rim light's direction)
+      sunScr.copy(DN.sun).multiplyScalar(1000).add(camera.position).project(camera); camera.getWorldDirection(tV);
+      const facing = smoothJ(0.2, 0.7, tV.dot(DN.sun)), ov = 1 - (WX[wxState.type].over || 0) * wxState.k;
+      pu.uSun.value.set(sunScr.x * 0.5 + 0.5, sunScr.y * 0.5 + 0.5, sunScr.z < 1 ? facing * DN.day * ov : 0);
+      if (Q.bloom && ATM.bloom) { bloomPasses(); pu.uBloom.value = (0.5 + DN.night * 0.35) * (Q.bloom < 1 ? 0.85 : 1); } else pu.uBloom.value = 0;
+      if (Q.shafts && ATM.rays && DN.day > 0.05 && pu.uSun.value.z > 0.01) {
+        sunMaskMat.uniforms.tSrc.value = rt.texture; sunMaskMat.uniforms.tDepth.value = rt.depthTexture; pass(sunMaskMat, bl.t[6]); pu.tSun.value = bl.t[6].texture;
+        pu.uShaft.value = 0.75; pu.uSteps.value = Q.shafts;
       } else pu.uShaft.value = 0;
+      if (ATM.dof) { farPasses(); pu.uDof.value = 0.6 * (1 - 0.4 * (WX[wxState.type].over || 0) * wxState.k); } else pu.uDof.value = 0;
+      pu.uSSR.value = ATM.ssr ? (Q.ssr | 0) : 0;
+      { const back = 0.35 + 0.65 * smoothJ(-0.2, 0.8, tV.dot(DN.sun)); pu.uRim.value.set(sun.color.r, sun.color.g, sun.color.b, ATM.rim ? sun.intensity * 0.16 * back * (0.4 + 0.6 * DN.day) * ov : 0); }
       renderer.setRenderTarget(null); renderer.render(postScene, postCam);
     } else renderer.render(scene, camera);
   };
@@ -2491,7 +2611,7 @@
     { const V = STYLE_U.uVal.value, dayV = V * (1 - night);
       if (V > 0) {
         // stronger sun against a dimmer, cooler sky fill: deeper, bluer shadows
-        if (sy > -0.04) sun.intensity *= 1 + 0.22 * V; hemi.intensity *= 1 - 0.22 * dayV;
+        if (sy > -0.04) sun.intensity *= 1 + 0.15 * V; hemi.intensity *= 1 - 0.14 * dayV; // v22.4: slightly softer than v22.0.1 (+22% / -22%)
         tC3.copy(su.zen.value); hemi.color.lerp(tC3, 0.12 * dayV);
         // a teal-blue sky and blue atmospheric haze that starts nearer, so distant hills layer into the sky
         tC3.setRGB(0.26, 0.52, 0.8); su.zen.value.lerp(tC3, 0.35 * dayV * (1 - over));
@@ -2512,7 +2632,19 @@
     cu.uMid.value.copy(su.hor.value).lerp(tC1, 0.55).lerp(su.wxc.value, over * 0.5);
     cu.uShade.value.copy(su.zen.value).lerp(su.hor.value, 0.45).multiplyScalar(0.85 - over * 0.15).lerp(su.wxc.value, over * 0.5).multiplyScalar(1 - over * 0.3);
     cu.uRim.value.copy(sun.color).multiplyScalar(0.6 * DN.day + 0.08 * night); cu.uFar.value.copy(su.hor.value).lerp(scene.fog.color, 0.3);
+    cu.uEdge.value.copy(su.zen.value).lerp(su.hor.value, 0.55).lerp(su.wxc.value, over * 0.6);
+    { const ci = GFX.cirrusMat.uniforms; ci.uL.value.copy(cu.uL.value); ci.uLit.value.copy(tC1).lerp(SETC, twi * 0.55); ci.uShade.value.copy(su.zen.value).lerp(su.hor.value, 0.6).lerp(SETC2, twi * 0.3);
+      ci.uCov.value = GFX.cloudCover || 0.55; ci.uA.value = ATM.cirrus ? 0.62 * (1 - over * 0.9) * (0.25 + 0.75 * DN.day + 0.2 * twi) : 0; ci.uDrift.value = cloudDrift * 0.0004;
+      GFX.cirrus.visible = ci.uA.value > 0.01; GFX.cirrus.position.set(camera.position.x, camera.position.y + 1500, camera.position.z); }
     GFX.cloudCover = Math.min(1, 0.55 + ((wd.cover || 0.55) - 0.55) * wk);
+    // v22.4 colour grade: the region's tint, warmer and richer at golden hour, a touch cooler and paler under a high sun, flatter under cloud
+    { const pu = postMat.uniforms, gk = ATM.grade ? 1 : 0, gold = twi * (1 - night), noon = smoothJ(0.45, 0.9, sy) * (1 - over);
+      tC3.copy(palCur.gr); tC3.r *= 1 + 0.05 * gold - 0.01 * noon; tC3.g *= 1 + 0.005 * gold; tC3.b *= 1 - 0.07 * gold + 0.012 * noon;
+      pu.uGain.value.set(1 + (tC3.r - 1) * gk, 1 + (tC3.g - 1) * gk, 1 + (tC3.b - 1) * gk);
+      pu.uLift.value.set(0.004, 0.008, 0.02).multiplyScalar(gk * (0.6 + night * 0.8));
+      pu.uSat.value = 1 + ((palCur.sat * (1 + 0.06 * gold - 0.03 * noon - 0.08 * over)) - 1) * gk; }
+    // v22.4 cloud shadows drifting over the ground (same wind as the clouds)
+    { const cs = ATMOS.cloud; cs[0] = -cloudDrift * 0.0042; cs[1] = 0; cs[2] = GFX.cloudCover; ATMOS.soft[0] = ATM.soft ? 0.07 : 0; ATMOS.soft[2] = 160; ATMOS.soft[3] = 1799; // the shadow box (sc) set up at the top cs[3] = ATM.clouds ? 0.42 * smoothJ(0.02, 0.2, sy) * (1 - over * 0.85) : 0; }
   }
   GFX.update = (dt, now) => {
     DN.t = (DN.t + dt / DN.len) % 1;
